@@ -81,9 +81,9 @@ export function WaveformPlayer({ samples, label, normalize, color = 'cyan', heig
   return (
     <div className={cn('rounded-xl bg-black/30 ring-1 ring-white/10', compact ? 'p-2' : 'p-3')}>
       {label && (
-        <div className="mb-2 flex items-center justify-between text-xs">
-          <span className="font-medium text-slate-200">{label}</span>
-          <span className="font-mono text-slate-500">
+        <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+          <span className="truncate font-medium text-slate-200">{label}</span>
+          <span className="shrink-0 font-mono text-slate-500">
             {time.toFixed(1)} / {duration.toFixed(1)} s
           </span>
         </div>
