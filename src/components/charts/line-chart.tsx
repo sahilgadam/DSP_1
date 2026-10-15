@@ -1,5 +1,5 @@
 import * as d3 from 'd3'
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { useElementWidth } from './use-element-width'
 
 export interface ChartSeries {
@@ -28,6 +28,11 @@ interface LineChartProps {
   xLabel?: string
   yLabel?: string
   xFormat?: (v: number) => string
+  /** Soft gradient under each solid trace — the spectrum-analyser look. */
+  fill?: boolean
+  xTicks?: number
+  yTicks?: number
+  strokeWidth?: number
 }
 
 const M = { top: 12, right: 12, bottom: 30, left: 44 }
@@ -67,7 +72,12 @@ export function LineChart({
   xLabel = 'Frequency (kHz)',
   yLabel = 'dB',
   xFormat = (v) => (v / 1000).toFixed(0),
+  fill = false,
+  xTicks = 8,
+  yTicks = 5,
+  strokeWidth = 1.4,
 }: LineChartProps) {
+  const gradientId = useId()
   const [ref, width] = useElementWidth<HTMLDivElement>()
   const innerW = Math.max(50, width - M.left - M.right)
   const innerH = height - M.top - M.bottom
@@ -91,12 +101,27 @@ export function LineChart({
     .line<[number, number]>()
     .x((d) => xs(d[0]))
     .y((d) => ys(d[1]))
+  const area = d3
+    .area<[number, number]>()
+    .x((d) => xs(d[0]))
+    .y0(innerH)
+    .y1((d) => ys(d[1]))
 
   return (
     <div ref={ref} className="w-full">
       <svg width={width} height={height} className="overflow-visible">
+        {fill && (
+          <defs>
+            {series.map((s, i) => (
+              <linearGradient key={s.label} id={`${gradientId}-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={s.color} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={s.color} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
+        )}
         <g transform={`translate(${M.left},${M.top})`}>
-          {ys.ticks(5).map((t) => (
+          {ys.ticks(yTicks).map((t) => (
             <g key={`y${t}`}>
               <line x1={0} x2={innerW} y1={ys(t)} y2={ys(t)} stroke="rgba(148,163,184,0.12)" />
               <text x={-8} y={ys(t)} dy="0.32em" textAnchor="end" className="fill-slate-500 font-mono text-[10px]">
@@ -104,7 +129,7 @@ export function LineChart({
               </text>
             </g>
           ))}
-          {xs.ticks(8).map((t) => (
+          {xs.ticks(xTicks).map((t) => (
             <g key={`x${t}`}>
               <line x1={xs(t)} x2={xs(t)} y1={0} y2={innerH} stroke="rgba(148,163,184,0.08)" />
               <text x={xs(t)} y={innerH + 16} textAnchor="middle" className="fill-slate-500 font-mono text-[10px]">
@@ -127,14 +152,19 @@ export function LineChart({
               </text>
             </g>
           ))}
+          {fill &&
+            pooled.map((pts, i) =>
+              series[i].dashed ? null : <path key={`fill-${series[i].label}`} d={area(pts) ?? ''} fill={`url(#${gradientId}-${i})`} stroke="none" />,
+            )}
           {pooled.map((pts, i) => (
             <path
               key={series[i].label}
               d={line(pts) ?? ''}
               fill="none"
               stroke={series[i].color}
-              strokeWidth={1.4}
+              strokeWidth={strokeWidth}
               strokeDasharray={series[i].dashed ? '4 3' : undefined}
+              strokeLinejoin="round"
               opacity={0.95}
             />
           ))}

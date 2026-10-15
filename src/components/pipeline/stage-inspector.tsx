@@ -1,5 +1,7 @@
 import { motion } from 'motion/react'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
+import { welchPsd } from '../../dsp/analysis'
+import { SAMPLE_RATE } from '../../dsp/constants'
 import type { BandLayout } from '../../dsp/spectral-ops'
 import type { PipelineNode } from '../../pipeline/stage-meta'
 import type { StageView } from '../../worker/protocol'
@@ -26,15 +28,37 @@ export function marksFor(layout: BandLayout) {
   ]
 }
 
+/**
+ * Detail PSD used when the spectrum is shown on its own: 75 % overlap and many more averaged
+ * segments than the worker's quick preview, so the trace is smooth enough to read at full width.
+ * ~13 ms per signal, memoised per stage.
+ */
+const DETAIL_NFFT = 2048
+const DETAIL_OVERLAP = 0.75
+const DETAIL_FRAMES = 400
+
 interface StageInspectorProps<S extends string> {
   node: PipelineNode<S>
   views: Record<S, StageView>
   layout: BandLayout
   extra?: ReactNode
+  /** Drop the spectrogram and give the full width to a larger, finer power spectrum. */
+  spectrumOnly?: boolean
 }
 
-export function StageInspector<S extends string>({ node, views, layout, extra }: StageInspectorProps<S>) {
-  if (!node.stage) {
+export function StageInspector<S extends string>({ node, views, layout, extra, spectrumOnly = false }: StageInspectorProps<S>) {
+  const stageView = node.stage ? views[node.stage] : null
+  const beforeView = node.before ? views[node.before] : null
+
+  const detail = useMemo(() => {
+    if (!spectrumOnly || !stageView) return null
+    return {
+      output: welchPsd(stageView.samples, SAMPLE_RATE, DETAIL_NFFT, DETAIL_OVERLAP, DETAIL_FRAMES),
+      input: beforeView ? welchPsd(beforeView.samples, SAMPLE_RATE, DETAIL_NFFT, DETAIL_OVERLAP, DETAIL_FRAMES) : null,
+    }
+  }, [spectrumOnly, stageView, beforeView])
+
+  if (!node.stage || !stageView) {
     return (
       <motion.div key={node.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
         <Card className="space-y-5">
@@ -44,14 +68,13 @@ export function StageInspector<S extends string>({ node, views, layout, extra }:
       </motion.div>
     )
   }
-  const view = views[node.stage]
-  const before = node.before ? views[node.before] : null
-  const beforeNode = node.before
+  const view = stageView
+  const before = beforeView
+  const inputPsd = detail?.input ?? before?.psd ?? null
+  const outputPsd = detail?.output ?? view.psd
   const series = [
-    ...(before && beforeNode
-      ? [{ x: before.psd.freqs, y: before.psd.db, color: '#64748b', label: "input of this block", dashed: true }]
-      : []),
-    { x: view.psd.freqs, y: view.psd.db, color: '#22d3ee', label: "output of this block" },
+    ...(inputPsd ? [{ x: inputPsd.freqs, y: inputPsd.db, color: '#64748b', label: 'input of this block', dashed: true }] : []),
+    { x: outputPsd.freqs, y: outputPsd.db, color: '#22d3ee', label: 'output of this block' },
   ]
 
   return (
@@ -68,13 +91,36 @@ export function StageInspector<S extends string>({ node, views, layout, extra }:
 
         {extra}
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        {spectrumOnly ? (
           <div>
-            <div className="mb-2 text-xs font-medium text-slate-300">Power spectrum (Welch PSD)</div>
-            <LineChart series={series} bands={bandsFor(layout)} xDomain={[0, 22050]} />
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <div className="text-sm font-medium text-slate-200">Power spectrum</div>
+              <div className="font-mono text-[11px] text-slate-500">
+                Welch · {DETAIL_NFFT}-pt Hann · {DETAIL_OVERLAP * 100}% overlap · {(SAMPLE_RATE / DETAIL_NFFT).toFixed(1)} Hz per bin
+              </div>
+            </div>
+            <LineChart
+              series={series}
+              bands={bandsFor(layout)}
+              xDomain={[0, 22050]}
+              height={340}
+              yRange={110}
+              xTicks={11}
+              yTicks={8}
+              fill
+              strokeWidth={1.6}
+              xFormat={(v) => (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}
+            />
           </div>
-          <SpectrogramCanvas spec={view.spec} title="Spectrogram" marks={marksFor(layout)} height={200} />
-        </div>
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div>
+              <div className="mb-2 text-xs font-medium text-slate-300">Power spectrum (Welch PSD)</div>
+              <LineChart series={series} bands={bandsFor(layout)} xDomain={[0, 22050]} />
+            </div>
+            <SpectrogramCanvas spec={view.spec} title="Spectrogram" marks={marksFor(layout)} height={200} />
+          </div>
+        )}
       </Card>
     </motion.div>
   )
