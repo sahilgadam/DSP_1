@@ -61,7 +61,8 @@ export const useStegoStore = create<StegoState>((set, get) => ({
   strengthDb: DEFAULT_STRENGTH_DB,
   hiddenText: 'Meet the DSP team at lab 4 at 5 PM. Bring the FFT notes!',
   channel: CLEAN_CHANNEL,
-  receiverKey: 'dsp-cie-2026',
+  // The receiver starts with nothing: the key must be typed in on the Receiver step.
+  receiverKey: '',
   fftKind: 'dit',
   receivedFile: null,
   encoded: null,
@@ -75,7 +76,7 @@ export const useStegoStore = create<StegoState>((set, get) => ({
   // Changing an upstream input invalidates everything computed from it.
   setCover: (cover) => set({ cover, encoded: null, transmitted: null, decoded: null }),
   setSecret: (secret) => set({ secret, encoded: null, transmitted: null, decoded: null }),
-  setKey: (key) => set({ key, receiverKey: key, encoded: null, transmitted: null, decoded: null }),
+  setKey: (key) => set({ key, encoded: null, transmitted: null, decoded: null }),
   setStrengthDb: (strengthDb) => set({ strengthDb, encoded: null, transmitted: null, decoded: null }),
   setHiddenText: (hiddenText) => set({ hiddenText, encoded: null, transmitted: null, decoded: null }),
   setChannel: (patch) => set((s) => ({ channel: { ...s.channel, ...patch }, transmitted: null, decoded: null })),
