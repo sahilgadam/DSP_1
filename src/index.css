@@ -61,3 +61,8 @@ body {
   background: #1f2a40;
   border-radius: 8px;
 }
+
+/* Stage 2's encoder walkthrough is stepped through by hand, so its wires crawl instead of racing. */
+.flow-slow .react-flow__edge.animated path {
+  animation-duration: 1.6s;
+}
