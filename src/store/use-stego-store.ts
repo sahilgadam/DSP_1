@@ -84,7 +84,8 @@ export const useStegoStore = create<StegoState>((set, get) => ({
   uiMode: 'beginner',
   cover: null,
   secret: null,
-  key: 'dsp-cie-2026',
+  // No default: the sender chooses the key (the receiver must type the same one).
+  key: '',
   strengthDb: DEFAULT_STRENGTH_DB,
   hiddenText: 'Meet the DSP team at lab 4 at 5 PM. Bring the FFT notes!',
   channel: CLEAN_CHANNEL,
@@ -120,7 +121,8 @@ export const useStegoStore = create<StegoState>((set, get) => ({
 
   maxReachableStep: () => {
     const s = get()
-    if (s.decoded) return 4
+    // Results open only once the key verified: a wrong key reveals nothing
+    if (s.decoded?.text.status === 'ok') return 4
     if (s.transmitted || s.receivedFile) return 3
     if (s.encoded) return 2
     if (s.cover && (s.secret || s.hiddenText.trim())) return 1

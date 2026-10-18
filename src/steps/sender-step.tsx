@@ -79,6 +79,8 @@ export function SenderStep() {
   const receivedRef = useRef<HTMLInputElement>(null)
   const [tourOpen, setTourOpen] = useState(uiMode === 'beginner')
   const [showKey, setShowKey] = useState(false)
+  /** The key field only turns red once the user has interacted with it. */
+  const [keyTouched, setKeyTouched] = useState(false)
   /** Text a bulk action replaced, kept so the user can undo an unwanted overwrite. */
   const [replaced, setReplaced] = useState<{ text: string; reason: ReplaceReason } | null>(null)
 
@@ -241,7 +243,11 @@ export function SenderStep() {
             title="Secret key"
             hint="The receiver needs the same key. It controls keyed sub-band scrambling so the hidden voice can be recovered."
             actions={
-              <Button variant="secondary" size="sm" onClick={() => setKey(randomKey())} icon={<Dices className="size-3.5" />}>
+              <Button variant="secondary" size="sm" onClick={() => {
+                  // show a generated key so it can be shared with the receiver
+                  setKey(randomKey())
+                  setShowKey(true)
+                }} icon={<Dices className="size-3.5" />}>
                 Generate random key
               </Button>
             }
@@ -269,17 +275,21 @@ export function SenderStep() {
                   id="key"
                   type={showKey ? 'text' : 'password'}
                   value={key}
-                  onChange={(e) => setKey(e.target.value)}
+                  onChange={(e) => {
+                    setKeyTouched(true)
+                    setKey(e.target.value)
+                  }}
+                  onBlur={() => setKeyTouched(true)}
                   className={cn(
                     'w-full rounded-xl bg-black/30 py-3 pl-10 pr-12 font-mono text-sm tracking-wide text-amber-200 outline-none ring-1 transition focus:ring-amber-300/60',
-                    keyMissing ? 'ring-rose-400/50' : 'ring-white/10',
+                    keyMissing && keyTouched ? 'ring-rose-400/50' : 'ring-white/10',
                   )}
-                  placeholder="type a key…"
+                  placeholder="enter a secret key…"
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
-                  aria-invalid={keyMissing}
+                  aria-invalid={keyMissing && keyTouched}
                   aria-describedby="key-help"
                 />
                 <button
@@ -293,9 +303,11 @@ export function SenderStep() {
                   {showKey ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
                 </button>
               </div>
-              <p id="key-help" className={cn('text-xs leading-relaxed', keyMissing ? 'text-rose-300' : keyIssue ? 'text-amber-300' : 'text-slate-500')}>
+              <p id="key-help" className={cn('text-xs leading-relaxed', keyMissing && keyTouched ? 'text-rose-300' : keyIssue ? 'text-amber-300' : 'text-slate-500')}>
                 {keyMissing
-                  ? 'A secret key is required before the audio can be encoded.'
+                  ? keyTouched
+                    ? 'A secret key is required before the audio can be encoded.'
+                    : 'Enter a secret key, or generate one. The receiver will need exactly the same key.'
                   : (keyIssue?.detail ?? 'Share it with the receiver through a separate, trusted channel.')}
               </p>
             </div>

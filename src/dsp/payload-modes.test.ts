@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gainMatchedSnrDb } from './analysis'
-import { computeLaneLayout, frameBits, MAGIC, MAGIC_TEXT_ONLY, bitsToBytes } from './bit-lane'
+import { computeLaneLayout, frameBits, MAGIC, MAGIC_TEXT_ONLY, MAGIC_VOICE_ONLY, bitsToBytes, type FrameContent } from './bit-lane'
 import { applyChannelWithStats, CLEAN_CHANNEL } from './channel'
 import { SAMPLE_RATE } from './constants'
 import { decryptText, encryptText } from './crypto'
@@ -20,15 +20,25 @@ const cover = loadSample('cover-demo.wav')
 const secret = loadSample('secret-demo.wav')
 const KEY = 'payload-modes-2026'
 
-async function textBits(text: string, withVoice: boolean) {
+async function textBits(text: string, withVoice: boolean, content: FrameContent = withVoice ? 'voice+text' : 'text') {
   const layout = computeLaneLayout(fftSizeFor(cover.length), SAMPLE_RATE)
-  return frameBits(await encryptText(text, KEY), layout, withVoice)
+  return frameBits(await encryptText(text, KEY), layout, content)
 }
 
 describe('text-only payload', () => {
-  it('marks the frame 0xA6 and a voice frame 0xA5', async () => {
+  it('marks text 0xA6, voice + text 0xA5 and voice-only 0xA7', async () => {
     expect(bitsToBytes((await textBits('x', false)).slice(0, 8))[0]).toBe(MAGIC_TEXT_ONLY)
     expect(bitsToBytes((await textBits('x', true)).slice(0, 8))[0]).toBe(MAGIC)
+    expect(bitsToBytes((await textBits('', true, 'voice')).slice(0, 8))[0]).toBe(MAGIC_VOICE_ONLY)
+  })
+
+  it('verifies the key of a voice-only file through its empty AES-GCM token', async () => {
+    const enc = encode(cover, secret, SAMPLE_RATE, { key: KEY, strengthDb: -20, fftKind: 'dit', textBits: await textBits('', true, 'voice') })
+    const right = decode(enc.stages.stego, SAMPLE_RATE, { key: KEY, fftKind: 'dit' })
+    expect(right.lane.content).toBe('voice')
+    expect(await decryptText(right.lane.payload!, KEY)).toBe('')
+    // a wrong key de-spreads with the wrong chips, so the header never syncs
+    expect(decode(enc.stages.stego, SAMPLE_RATE, { key: 'wrong', fftKind: 'dit' }).lane.status).toBe('no-payload')
   })
 
   it('encodes without a voice, leaves the carrier band to the cover, and decodes the text', async () => {
@@ -42,14 +52,14 @@ describe('text-only payload', () => {
 
     const dec = decode(applyChannelWithStats(enc.stages.stego, CLEAN_CHANNEL).out, SAMPLE_RATE, { key: KEY, fftKind: 'dit' })
     expect(dec.lane.status).toBe('ok')
-    expect(dec.lane.withVoice).toBe(false)
+    expect(dec.lane.content).toBe('text')
     expect(await decryptText(dec.lane.payload!, KEY)).toBe('only text, no voice')
   })
 
-  it('reports withVoice true for a voice + text file and null when nothing syncs', async () => {
+  it('reports voice + text content, and null when nothing syncs', async () => {
     const enc = encode(cover, secret, SAMPLE_RATE, { key: KEY, strengthDb: -20, fftKind: 'dit', textBits: await textBits('hi', true) })
-    expect(decode(enc.stages.stego, SAMPLE_RATE, { key: KEY, fftKind: 'dit' }).lane.withVoice).toBe(true)
-    expect(decode(enc.stages.stego, SAMPLE_RATE, { key: `${KEY}x`, fftKind: 'dit' }).lane.withVoice).toBe(null)
+    expect(decode(enc.stages.stego, SAMPLE_RATE, { key: KEY, fftKind: 'dit' }).lane.content).toBe('voice+text')
+    expect(decode(enc.stages.stego, SAMPLE_RATE, { key: `${KEY}x`, fftKind: 'dit' }).lane.content).toBe(null)
   })
 
   it('refuses an empty payload', () => {

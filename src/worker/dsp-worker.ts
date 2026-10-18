@@ -40,13 +40,20 @@ function recoveryMetrics(reference: Float32Array | null, recovered: Float32Array
 }
 
 /** Encrypts the text and frames it as bits for the lane of a clip of this length. */
+/**
+ * Encrypts the text and frames it as bits for the lane of a clip of this length. With no text but a
+ * voice, an encrypted empty text is sent instead: a key-check token, so the receiver can always verify
+ * the key with AES-GCM.
+ */
 async function prepareText(text: string, key: string, length: number, sampleRate: number, withVoice: boolean): Promise<TextLaneInfo | null> {
-  if (text.trim().length === 0) return null
+  const hasText = text.trim().length > 0
+  if (!hasText && !withVoice) return null
   const layout = computeLaneLayout(fftSizeFor(length), sampleRate)
-  const cipher = await encryptText(text, key)
-  const bits = frameBits(cipher, layout, withVoice)
+  const plaintext = hasText ? text : ''
+  const cipher = await encryptText(plaintext, key)
+  const bits = frameBits(cipher, layout, hasText ? (withVoice ? 'voice+text' : 'text') : 'voice')
   return {
-    plaintext: text,
+    plaintext,
     cipher,
     bits,
     capacityBytes: payloadCapacityBytes(layout) - CRYPTO_OVERHEAD,
@@ -73,6 +80,8 @@ async function readText(lane: LaneReadout, key: string, referenceBits: Uint8Arra
   if (lane.status === 'ok' && lane.payload) {
     try {
       text = await decryptText(lane.payload, key)
+      // a voice-only frame carries an empty key-check token, not a message
+      if (lane.content === 'voice') text = null
     } catch {
       status = 'auth-failed'
     }
@@ -85,7 +94,7 @@ async function readText(lane: LaneReadout, key: string, referenceBits: Uint8Arra
     text,
     bits: lane.bits,
     // only an authenticated frame is trusted to say what was sent
-    withVoice: status === 'ok' ? lane.withVoice : null,
+    content: status === 'ok' ? lane.content : null,
     softRe: thin(lane.softRe.map((v) => v / scale)),
     softIm: thin(lane.softIm.map((v) => v / scale)),
     ber: referenceBits ? bitErrorRate(referenceBits, lane.bits) : null,
@@ -134,12 +143,10 @@ async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput 
         post({ id: req.id, progress: e })
       }
       const outer = stageTracker(onStage)
-      let text: TextLaneInfo | null = null
-      if (req.text.trim().length > 0) {
-        outer.start('aes')
-        text = await prepareText(req.text, req.params.key, req.cover.length, req.sampleRate, !!req.secret)
-        outer.end()
-      } else outer.skip('aes')
+      // AES-GCM always runs: it encrypts the text, or a key-check token when only a voice is sent
+      outer.start('aes')
+      const text = await prepareText(req.text, req.params.key, req.cover.length, req.sampleRate, !!req.secret)
+      outer.end()
       const r = encode(req.cover, req.secret, req.sampleRate, { ...req.params, textBits: text?.bits ?? null }, onStage)
       const dspMs = performance.now() - t0
       const stego = r.stages.stego
@@ -187,7 +194,7 @@ async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput 
       const stages = views(r.stages, req.sampleRate)
       const text = await readText(r.lane, req.params.key, req.referenceBits)
       // an authenticated text-only frame proves the carrier band holds no voice, so nothing to score
-      const voiceAbsent = text.withVoice === false
+      const voiceAbsent = text.content === 'text'
       return {
         stages,
         layout: r.layout,

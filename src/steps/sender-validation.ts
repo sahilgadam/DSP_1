@@ -47,6 +47,15 @@ export function coverTextLimit(cover: AudioClip | null): { limit: number | null;
   }
 }
 
+/** True when the cover's text lane can hold the AES-GCM key-check token sent with a voice-only payload. */
+export function keyTokenFits(cover: AudioClip): boolean {
+  try {
+    return payloadCapacityBytes(computeLaneLayout(fftSizeFor(cover.samples.length), SAMPLE_RATE)) >= CRYPTO_OVERHEAD
+  } catch {
+    return false
+  }
+}
+
 export function capacityInfo(cover: AudioClip | null, text: string): CapacityInfo {
   const { limit, error } = coverTextLimit(cover)
   const used = utf8Length(text)
@@ -162,6 +171,14 @@ export function validateSender({ cover, secret, key, hiddenText, beginner }: Sen
         tone: 'warning',
       })
     }
+  }
+  if (cover && secret && !hasText && cover.samples.length > 0 && !keyTokenFits(cover)) {
+    issues.push({
+      id: 'voice-no-token',
+      label: 'Cover too short',
+      detail: 'This cover is too short to carry the key check the receiver needs. Use a cover of about 6 s or more.',
+      tone: 'blocking',
+    })
   }
   if (hiddenText.length > 0 && !hasText) {
     issues.push({
