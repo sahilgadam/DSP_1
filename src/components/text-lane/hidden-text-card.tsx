@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { AudioClip } from '../../audio/load-audio'
 import { CHIPS_PER_BIT, LANE_HIGH_HZ, LANE_LOW_HZ } from '../../dsp/constants'
 import { capacityInfo } from '../../steps/sender-validation'
-import { Panel, StatusPill } from '../sender/panel'
+import { Panel, StatusPill } from '../ui/panel'
 import { Button, cn } from '../ui/primitives'
 
 const SAMPLE_TEXT = 'Meet the DSP team at lab 4 at 5 PM. Bring the FFT notes!'
