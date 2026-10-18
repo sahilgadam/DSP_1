@@ -1,11 +1,11 @@
 /// <reference lib="webworker" />
-import { correlation, energy, gainMatchedSnrDb, segmentalSnrDb, snrDb, spectrogram, welchPsd } from '../dsp/analysis'
+import { correlation, energy, gainMatchedSnrDb, segmentalSnrDb, spectrogram, welchPsd } from '../dsp/analysis'
 import { bitErrorRate, computeLaneLayout, frameBits, payloadCapacityBytes, type LaneReadout } from '../dsp/bit-lane'
-import { applyChannel } from '../dsp/channel'
+import { applyChannelWithStats } from '../dsp/channel'
 import { CRYPTO_OVERHEAD, decryptText, encryptText } from '../dsp/crypto'
 import { gaussianNoise } from '../dsp/prng'
 import { frequencyResponse } from '../dsp/fir'
-import { decode, encode, fftSizeFor } from '../dsp/stego'
+import { decode, encode, fftSizeFor, stageTracker, type StageEvent } from '../dsp/stego'
 import type {
   ChannelOutput,
   DecodeOutput,
@@ -40,11 +40,11 @@ function recoveryMetrics(reference: Float32Array | null, recovered: Float32Array
 }
 
 /** Encrypts the text and frames it as bits for the lane of a clip of this length. */
-async function prepareText(text: string, key: string, length: number, sampleRate: number): Promise<TextLaneInfo | null> {
+async function prepareText(text: string, key: string, length: number, sampleRate: number, withVoice: boolean): Promise<TextLaneInfo | null> {
   if (text.trim().length === 0) return null
   const layout = computeLaneLayout(fftSizeFor(length), sampleRate)
   const cipher = await encryptText(text, key)
-  const bits = frameBits(cipher, layout)
+  const bits = frameBits(cipher, layout, withVoice)
   return {
     plaintext: text,
     cipher,
@@ -84,6 +84,8 @@ async function readText(lane: LaneReadout, key: string, referenceBits: Uint8Arra
     status,
     text,
     bits: lane.bits,
+    // only an authenticated frame is trusted to say what was sent
+    withVoice: status === 'ok' ? lane.withVoice : null,
     softRe: thin(lane.softRe.map((v) => v / scale)),
     softIm: thin(lane.softIm.map((v) => v / scale)),
     ber: referenceBits ? bitErrorRate(referenceBits, lane.bits) : null,
@@ -117,18 +119,35 @@ function warmup(): null {
   return null
 }
 
+const post = (msg: WorkerResponse, transfer: Transferable[] = []) => self.postMessage(msg, transfer)
+
 async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput | DecodeOutput | null> {
   const t0 = performance.now()
   switch (req.type) {
     case 'warmup':
       return warmup()
     case 'encode': {
-      const text = await prepareText(req.text, req.params.key, req.cover.length, req.sampleRate)
-      const r = encode(req.cover, req.secret, req.sampleRate, { ...req.params, textBits: text?.bits ?? null })
+      // every block reports when it starts and ends, so the UI can follow the real run as it happens
+      const run: StageEvent[] = []
+      const onStage = (e: StageEvent) => {
+        if (e.status !== 'running') run.push(e)
+        post({ id: req.id, progress: e })
+      }
+      const outer = stageTracker(onStage)
+      let text: TextLaneInfo | null = null
+      if (req.text.trim().length > 0) {
+        outer.start('aes')
+        text = await prepareText(req.text, req.params.key, req.cover.length, req.sampleRate, !!req.secret)
+        outer.end()
+      } else outer.skip('aes')
+      const r = encode(req.cover, req.secret, req.sampleRate, { ...req.params, textBits: text?.bits ?? null }, onStage)
       const dspMs = performance.now() - t0
       const stego = r.stages.stego
       const hidden = r.stages['secret-shifted']
+      outer.start('analysis')
       const stages = views(r.stages, req.sampleRate)
+      const coverSnrDb = gainMatchedSnrDb(req.cover, stego)
+      outer.end()
       return {
         stages,
         layout: r.layout,
@@ -136,19 +155,29 @@ async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput 
         gain: r.gain,
         clipScale: r.clipScale,
         secretTruncated: r.secretTruncated,
+        hasVoice: r.hasVoice,
         firResponse: frequencyResponse(r.fir, req.sampleRate, 600),
         metrics: {
-          coverSnrDb: gainMatchedSnrDb(req.cover, stego),
-          hiddenLevelDb: 10 * Math.log10(energy(hidden) / Math.max(energy(stego), 1e-20)),
+          coverSnrDb,
+          hiddenLevelDb: r.hasVoice ? 10 * Math.log10(energy(hidden) / Math.max(energy(stego), 1e-20)) : null,
         },
         totalMs: performance.now() - t0,
         timings: { dspMs, analysisMs: performance.now() - t0 - dspMs },
         text,
+        run,
+        fftSize: fftSizeFor(req.cover.length),
       }
     }
     case 'channel': {
-      const received = applyChannel(req.stego, req.params)
-      return { received: view(received, req.sampleRate), channelSnrDb: snrDb(req.stego, received) }
+      const seed = req.params.noiseSnrDb === null ? null : (req.params.seed ?? 1234)
+      const { out: received, clipped } = applyChannelWithStats(req.stego, req.params)
+      return {
+        received: view(received, req.sampleRate),
+        channelSnrDb: gainMatchedSnrDb(req.stego, received),
+        levelChangeDb: 10 * Math.log10(Math.max(energy(received), 1e-20) / Math.max(energy(req.stego), 1e-20)),
+        clippedSamples: clipped,
+        noiseSeed: seed,
+      }
     }
     case 'decode': {
       const wrongKeyStr = `${req.params.key}?`
@@ -156,6 +185,9 @@ async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput 
       const wrongRecovered = r.wrongKeyRecovered ?? new Float32Array(req.received.length)
       const dspMs = performance.now() - t0
       const stages = views(r.stages, req.sampleRate)
+      const text = await readText(r.lane, req.params.key, req.referenceBits)
+      // an authenticated text-only frame proves the carrier band holds no voice, so nothing to score
+      const voiceAbsent = text.withVoice === false
       return {
         stages,
         layout: r.layout,
@@ -166,8 +198,8 @@ async function handle(req: WorkerRequest): Promise<EncodeOutput | ChannelOutput 
         butterflyCount: r.butterflyCount,
         totalMs: performance.now() - t0,
         timings: { dspMs, analysisMs: performance.now() - t0 - dspMs },
-        metrics: recoveryMetrics(req.reference, r.stages.recovered),
-        text: await readText(r.lane, req.params.key, req.referenceBits),
+        metrics: voiceAbsent ? null : recoveryMetrics(req.reference, r.stages.recovered),
+        text,
         wrongKey: {
           key: wrongKeyStr,
           recovered: view(wrongRecovered, req.sampleRate),
@@ -183,10 +215,8 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   const req = ev.data
   try {
     const result = await handle(req)
-    const msg: WorkerResponse = { id: req.id, ok: true, result }
-    self.postMessage(msg, result ? transferables(result) : [])
+    post({ id: req.id, ok: true, result }, result ? transferables(result) : [])
   } catch (err) {
-    const msg: WorkerResponse = { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) }
-    self.postMessage(msg)
+    post({ id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) })
   }
 }

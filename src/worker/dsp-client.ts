@@ -1,8 +1,8 @@
 import type { ChannelParams } from '../dsp/channel'
-import type { DecodeParams, EncodeParams } from '../dsp/stego'
+import type { DecodeParams, EncodeParams, StageListener } from '../dsp/stego'
 import type { ChannelOutput, DecodeOutput, EncodeOutput, WorkerRequest, WorkerResponse } from './protocol'
 
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void }
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; onStage?: StageListener }
 
 let worker: Worker | null = null
 let nextId = 1
@@ -15,6 +15,10 @@ function getWorker(): Worker {
     const msg = ev.data
     const p = pending.get(msg.id)
     if (!p) return
+    if ('progress' in msg) {
+      p.onStage?.(msg.progress)
+      return
+    }
     pending.delete(msg.id)
     if (msg.ok) p.resolve(msg.result)
     else p.reject(new Error(msg.error))
@@ -32,10 +36,10 @@ function getWorker(): Worker {
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 
 /** Sends copies of the inputs (so the caller keeps its arrays) and awaits the worker's reply. */
-function call<T>(req: DistributiveOmit<WorkerRequest, 'id'>, transfer: ArrayBuffer[]): Promise<T> {
+function call<T>(req: DistributiveOmit<WorkerRequest, 'id'>, transfer: ArrayBuffer[], onStage?: StageListener): Promise<T> {
   const id = nextId++
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
+    pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onStage })
     getWorker().postMessage({ ...req, id } as WorkerRequest, transfer)
   })
 }
@@ -47,10 +51,18 @@ export function warmUpWorker(): void {
   })
 }
 
-export function runEncode(cover: Float32Array, secret: Float32Array, sampleRate: number, params: EncodeParams, text: string) {
+/** `onStage` receives every encoder block's start and end while the worker runs it. */
+export function runEncode(
+  cover: Float32Array,
+  secret: Float32Array | null,
+  sampleRate: number,
+  params: EncodeParams,
+  text: string,
+  onStage?: StageListener,
+) {
   const c = cover.slice()
-  const s = secret.slice()
-  return call<EncodeOutput>({ type: 'encode', cover: c, secret: s, sampleRate, params, text }, [c.buffer, s.buffer])
+  const s = secret ? secret.slice() : null
+  return call<EncodeOutput>({ type: 'encode', cover: c, secret: s, sampleRate, params, text }, s ? [c.buffer, s.buffer] : [c.buffer], onStage)
 }
 
 export function runChannel(stego: Float32Array, sampleRate: number, params: ChannelParams) {

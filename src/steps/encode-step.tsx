@@ -1,10 +1,11 @@
-import { ArrowRight, ChevronLeft, ChevronRight, RotateCcw, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Cpu, Play, RotateCcw, Workflow } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { LineChart } from '../components/charts/line-chart'
 import { BeginnerTour, type BeginnerTourStep } from '../components/layout/beginner-tour'
 import { PermutationView } from '../components/pipeline/permutation-view'
 import { LaneStats } from '../components/text-lane/text-result'
 import { BitGrid, CipherFrameView } from '../components/text-lane/text-lane-views'
+import { EncoderRunDiagram, RunTimeline } from '../components/pipeline/encoder-run-diagram'
 import { PipelineFlow } from '../components/pipeline/pipeline-flow'
 import { StageInspector } from '../components/pipeline/stage-inspector'
 import { Button, Card, CardTitle } from '../components/ui/primitives'
@@ -58,6 +59,54 @@ const BEGINNER_HIDE_TOUR_STEPS: BeginnerTourStep[] = [
   },
 ]
 
+/** The live run of the encoder: blocks light up from the worker's own stage events. */
+function EncoderRunCard() {
+  const { encoded, busy, encodeProgress, encodeError, encode, goTo, cover, secret, hiddenText } = useStegoStore()
+  const running = busy === 'encode'
+  const started = Object.keys(encodeProgress).length > 0
+  const canRun = !!cover && (!!secret || hiddenText.trim().length > 0)
+  const status = running
+    ? 'Encoding — each block lights up when the worker actually reaches it.'
+    : encodeError
+      ? `Encoding failed: ${encodeError}`
+      : encoded
+        ? `Done. The stego file is ready${encoded.hasVoice ? '' : ' (text only — no voice was hidden)'}.`
+        : 'Not encoded yet.'
+
+  return (
+    <Card data-tour-target="encode-run">
+      <CardTitle
+        icon={<Cpu className="size-4" />}
+        title="Encoder — live run"
+        hint="The real encoder, block by block, in the order the code executes. Times are measured in the Web Worker, not simulated."
+        right={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void encode()}
+            disabled={running || !canRun}
+            icon={started ? <RotateCcw className="size-3.5" /> : <Play className="size-3.5" />}
+          >
+            {started ? 'Run again' : 'Start encoding'}
+          </Button>
+        }
+      />
+      <EncoderRunDiagram progress={encodeProgress} failed={!!encodeError && !running} fftSize={encoded?.fftSize ?? null} />
+      <div className="mt-4 space-y-4">
+        <p role="status" aria-live="polite" className={encodeError && !running ? 'text-sm text-rose-300' : 'text-sm text-slate-300'}>
+          {status}
+        </p>
+        <RunTimeline progress={encodeProgress} />
+        {encodeError && !running && (
+          <Button variant="secondary" size="sm" onClick={() => goTo(0)} icon={<ArrowLeft className="size-3.5" />}>
+            Back to the sender
+          </Button>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export function EncodeStep() {
   const { encoded, key, goTo, uiMode } = useStegoStore()
   /** Highest `order` revealed so far: the walkthrough only advances when the user asks it to. */
@@ -84,7 +133,7 @@ export function EncodeStep() {
 
   const node = useMemo(() => ENCODE_NODES.find((n) => n.id === selected) ?? ENCODE_NODES[0], [selected])
 
-  if (!encoded) return null
+  if (!encoded) return <EncoderRunCard />
   const { stages, layout, permutation, firResponse, text } = encoded
   const noText = <p className="text-sm text-slate-400">No hidden text was entered on the Sender step, so the lane stays empty.</p>
 
@@ -117,18 +166,24 @@ export function EncodeStep() {
 
   return (
     <div className="space-y-6">
+      <EncoderRunCard />
       <Card data-tour-target="encode-overview" className="border-cyan-400/20 bg-cyan-400/[0.04]">
         <CardTitle title="How did this work?" hint="Technical explanation" />
         <p className="text-sm leading-relaxed text-slate-300">
           The application transforms the audio into the frequency domain using FFT, places the hidden information in a high-frequency region, and converts the result back into audio. The detailed DSP visualisations below let you inspect every stage.
         </p>
+        {!encoded.hasVoice && (
+          <p className="mt-2 text-sm text-amber-200/90">
+            This run hid text only, so the voice blocks below carry silence and the cover keeps its own 16.5–19.9 kHz content.
+          </p>
+        )}
       </Card>
       <div data-tour-target="fft-pipeline">
         <Card>
         <CardTitle
           icon={<Workflow className="size-4" />}
-          title="Encoder block diagram"
-          hint="Step through the encoder one block at a time, or click any block to inspect and listen to the signal there."
+          title="Signal-flow walkthrough"
+          hint="The textbook view of the same encoder, one concept at a time. (The code takes one FFT first and does the FIR and time reversal as spectral operations — mathematically the same result.) Click any block to inspect and listen to the signal there."
           right={
             <Button variant="ghost" size="sm" onClick={() => goToStep(0)} icon={<RotateCcw className="size-3.5" />} disabled={revealed === 0}>
               Restart
@@ -182,7 +237,7 @@ export function EncodeStep() {
           Send the audio
         </Button>
       </div>
-      <BeginnerTour open={uiMode === 'beginner' && tourOpen} steps={BEGINNER_HIDE_TOUR_STEPS} onClose={() => setTourOpen(false)} />
+      <BeginnerTour open={uiMode === 'beginner' && tourOpen && !!encoded} steps={BEGINNER_HIDE_TOUR_STEPS} onClose={() => setTourOpen(false)} />
     </div>
   )
 }

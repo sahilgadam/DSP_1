@@ -135,7 +135,9 @@ export function SenderStep() {
       setError(status.blocking[0].detail)
       return
     }
-    if (await encode()) goTo(1)
+    // Encoding runs on the Encode step, where its live block diagram follows the worker.
+    void encode()
+    goTo(1)
   }
 
   const keyMissing = blockedBy('key-missing')
@@ -175,7 +177,7 @@ export function SenderStep() {
         <SectionHeading
           eyebrow="Payload"
           title="What you are hiding"
-          hint="A spoken message and a written message, carried in two separate frequency lanes of the same file. Use either, or both together."
+          hint="A spoken message and a written message, carried in two separate frequency lanes of the same file. Use either one, or both together."
           accent="violet"
         />
         <div id="sender-payload" className="grid items-stretch gap-5 lg:grid-cols-2">
@@ -311,8 +313,8 @@ export function SenderStep() {
         <div className="min-w-0 space-y-3">
           <div id="sender-blocking" className="flex flex-wrap items-center gap-2">
             <ReadyChip done={!!cover && !blockedBy('cover-')} label="Cover audio" />
-            <ReadyChip done={!!secret && !blockedBy('secret-')} label="Voice message" />
-            <ReadyChip done={status.capacity.used > 0 && !blockedBy('text-')} optional label="Hidden text" />
+            <ReadyChip done={!!secret && !blockedBy('secret-')} optional label="Voice message" />
+            <ReadyChip done={hiddenText.trim().length > 0 && !blockedBy('text-')} optional label="Hidden text" />
             <ReadyChip done={!keyMissing} label="Secret key" />
           </div>
           <IssueList issues={status.blocking} tone="blocking" />

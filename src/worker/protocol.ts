@@ -2,7 +2,7 @@ import type { Psd, Spectrogram } from '../dsp/analysis'
 import type { ChannelParams } from '../dsp/channel'
 import type { FrequencyResponse } from '../dsp/fir'
 import type { BandLayout } from '../dsp/spectral-ops'
-import type { DecodeParams, DecodeStageId, EncodeParams, EncodeStageId } from '../dsp/stego'
+import type { DecodeParams, DecodeStageId, EncodeParams, EncodeStageId, StageEvent } from '../dsp/stego'
 
 /** Audio of one pipeline stage plus what the UI needs to draw it. */
 export interface StageView {
@@ -34,6 +34,8 @@ export interface TextDecodeInfo {
   text: string | null
   /** Bits read (header + payload). */
   bits: Uint8Array
+  /** What the frame's sync byte says about the voice band: true = a voice was sent, false = text only, null = unknown. */
+  withVoice: boolean | null
   /** Despread symbols (normalised), at most ~1500 points, for the constellation plot. */
   softRe: Float32Array
   softIm: Float32Array
@@ -48,16 +50,21 @@ export interface EncodeOutput {
   gain: number
   clipScale: number
   secretTruncated: boolean
+  /** False for a text-only payload. */
+  hasVoice: boolean
   firResponse: FrequencyResponse
   metrics: {
     /** SNR of the stego file against the original cover (gain matched). */
     coverSnrDb: number
-    /** Actual level of the hidden band relative to the stego file. */
-    hiddenLevelDb: number
+    /** Actual level of the hidden band relative to the stego file (null when no voice was hidden). */
+    hiddenLevelDb: number | null
   }
   totalMs: number
   timings: Timings
   text: TextLaneInfo | null
+  /** Every block the encoder ran, in execution order, with its measured duration. */
+  run: StageEvent[]
+  fftSize: number
 }
 
 /** Where the worker spent its time (ms). */
@@ -68,8 +75,17 @@ export interface Timings {
 
 export interface ChannelOutput {
   received: StageView
-  /** SNR of the received file against the clean stego file. */
+  /**
+   * SNR of the received file against the clean stego file after a least-squares gain match, so a pure
+   * volume change does not count as damage (noise and quantisation do).
+   */
   channelSnrDb: number
+  /** Level of the received file relative to the sent one (dB). */
+  levelChangeDb: number
+  /** Samples that went past full scale (±1) and were clipped by the 16-bit file. */
+  clippedSamples: number
+  /** Noise realisation actually used (null on a noiseless channel). */
+  noiseSeed: number | null
 }
 
 export interface RecoveryMetrics {
@@ -99,7 +115,8 @@ export type WorkerRequest =
       type: 'encode'
       id: number
       cover: Float32Array
-      secret: Float32Array
+      /** Null for a text-only payload. */
+      secret: Float32Array | null
       sampleRate: number
       params: EncodeParams
       /** Hidden text to encrypt into the bit lane ('' = none). */
@@ -118,5 +135,7 @@ export type WorkerRequest =
     }
 
 export type WorkerResponse =
+  /** Streamed while an encode runs: one event per block start/end. */
+  | { id: number; progress: StageEvent }
   | { id: number; ok: true; result: EncodeOutput | ChannelOutput | DecodeOutput | null }
   | { id: number; ok: false; error: string }
