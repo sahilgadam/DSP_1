@@ -135,16 +135,19 @@ export function validateSender({ cover, secret, key, hiddenText, beginner }: Sen
     }
   }
 
-  // --- secret voice (encode() requires it in both UI modes) ----------------
+  // --- payload: a voice, a text, or both (encode() rejects neither) --------
+  const hasText = hiddenText.trim().length > 0
   if (!secret) {
-    issues.push({
-      id: 'secret-missing',
-      label: 'Voice message',
-      detail: beginner
-        ? 'Add the secret voice message — record it with your microphone, or use the demo clip.'
-        : 'Load the secret voice to hide — record, upload, or use the demo clip.',
-      tone: 'blocking',
-    })
+    if (!hasText) {
+      issues.push({
+        id: 'payload-missing',
+        label: 'Payload',
+        detail: beginner
+          ? 'Add something to hide: record or load a voice message, type a hidden text, or both.'
+          : 'Nothing to hide yet: load a secret voice (record, upload or demo), type a hidden text, or both.',
+        tone: 'blocking',
+      })
+    }
   } else {
     if (secret.samples.length === 0) {
       issues.push({ id: 'secret-empty', label: 'Voice message', detail: 'The secret voice contains no samples. Record or load it again.', tone: 'blocking' })
@@ -159,6 +162,14 @@ export function validateSender({ cover, secret, key, hiddenText, beginner }: Sen
         tone: 'warning',
       })
     }
+  }
+  if (hiddenText.length > 0 && !hasText) {
+    issues.push({
+      id: 'text-blank',
+      label: 'Hidden text',
+      detail: 'The hidden text contains only spaces or line breaks, so no text will be sent.',
+      tone: 'warning',
+    })
   }
 
   // --- key (assertKey: a blank key throws) ---------------------------------
@@ -180,16 +191,16 @@ export function validateSender({ cover, secret, key, hiddenText, beginner }: Sen
   }
 
   // --- hidden text (frameBits rejects an oversized payload) ----------------
-  if (capacity.error && hiddenText.length > 0) {
+  if (capacity.error && hasText) {
     issues.push({ id: 'text-no-capacity', label: 'Hidden text', detail: `${capacity.error} Clear the text, or load a longer cover.`, tone: 'blocking' })
-  } else if (capacity.over) {
+  } else if (hasText && capacity.over) {
     issues.push({
       id: 'text-too-long',
       label: 'Hidden text',
       detail: `The hidden text needs ${capacity.used} bytes but this cover carries ${capacity.limit}. Remove about ${capacity.used - (capacity.limit ?? 0)} bytes, or use a longer cover.`,
       tone: 'blocking',
     })
-  } else if (capacity.limit !== null && capacity.limit > 0 && capacity.used > capacity.limit * 0.9) {
+  } else if (hasText && capacity.limit !== null && capacity.limit > 0 && capacity.used > capacity.limit * 0.9) {
     issues.push({ id: 'text-near-limit', label: 'Hidden text', detail: `Only ${capacity.remaining} bytes left in the text lane.`, tone: 'warning' })
   }
 

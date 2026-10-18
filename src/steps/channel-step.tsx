@@ -56,7 +56,7 @@ export function ChannelStep() {
             <Switch checked={channel.quantize16} onChange={(v) => setChannel({ quantize16: v })} label="Quantise to 16-bit audio" />
             <Switch checked={noisy} onChange={(v) => setChannel({ noiseSnrDb: v ? 30 : null })} label="Add transmission noise" />
             <Slider
-              label="Amount of noise"
+              label="Noise level (SNR)"
               value={channel.noiseSnrDb ?? 30}
               min={0}
               max={60}
@@ -79,14 +79,30 @@ export function ChannelStep() {
             <div className="space-y-4">
               <WaveformPlayer samples={transmitted.received.samples} color="cyan" label="received.wav" downloadName="received.wav" height={72} />
               <div className="grid gap-3 sm:grid-cols-2">
-                <Metric label="Received vs sent" value={fmtDb(transmitted.channelSnrDb)} unit="dB SNR" hint="Damage done by the channel" />
                 <Metric
-                  label="Channel"
-                  value={noisy ? `AWGN ${channel.noiseSnrDb} dB` : 'clean'}
+                  label="Received vs sent"
+                  value={fmtDb(transmitted.channelSnrDb)}
+                  unit="dB SNR"
+                  hint="Gain-matched: noise, quantisation and clipping count as damage, a pure volume change does not"
+                />
+                <Metric
+                  label="Level change"
+                  value={`${transmitted.levelChangeDb > 0.05 ? '+' : ''}${transmitted.levelChangeDb.toFixed(1)}`}
+                  unit="dB"
                   tone="violet"
-                  hint={`${channel.quantize16 ? '16-bit PCM' : '32-bit float'} · gain ${channel.gainDb} dB`}
+                  hint={`${channel.quantize16 ? '16-bit PCM' : '32-bit float'} · gain ${channel.gainDb > 0 ? '+' : ''}${channel.gainDb} dB${noisy ? ` · AWGN ${channel.noiseSnrDb} dB` : ''}`}
                 />
               </div>
+              {transmitted.noiseSeed !== null && (
+                <p className="font-mono text-[11px] text-slate-500">Noise realisation seed {transmitted.noiseSeed} — every transmission draws new noise.</p>
+              )}
+              {transmitted.clippedSamples > 0 && (
+                <p className="rounded-xl bg-amber-400/10 px-3 py-2 text-xs text-amber-100 ring-1 ring-amber-400/30">
+                  {transmitted.clippedSamples.toLocaleString('en-US')} samples went past full scale
+                  {channel.quantize16 ? ' and were clipped by the 16-bit file' : ' and will clip when saved as a 16-bit WAV'}. Clipping spreads distortion across the whole
+                  spectrum, including the hidden bands.
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-white/15 text-sm text-slate-500">

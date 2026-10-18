@@ -99,8 +99,10 @@ export function AudioSourceCard({
     try {
       const next = await fn()
       onClip(next)
-      // Keep the displaced clip so a mis-click (especially over a recording) is recoverable.
-      setPrevious(replacing)
+      // Keep the displaced clip so a mis-click (especially over a recording) is recoverable —
+      // unless it was the very same audio loaded again, where there is nothing to undo.
+      const same = !!replacing && replacing.name === next.name && replacing.samples.length === next.samples.length
+      setPrevious(same ? null : replacing)
       if (!keepSpeechNote) setSpeechNote(null)
       return true
     } catch (e) {

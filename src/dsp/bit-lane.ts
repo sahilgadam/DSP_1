@@ -9,7 +9,10 @@ import { hashKey, mulberry32 } from './prng'
  * The receiver multiplies by the same chips and sums ("despreading"), gaining 10·log10(chips) dB of SNR.
  */
 
+/** Sync byte of a frame sent together with a hidden voice. */
 export const MAGIC = 0xa5
+/** Sync byte of a frame sent without a voice: the carrier band holds only the cover's own audio. */
+export const MAGIC_TEXT_ONLY = 0xa6
 /** Sync byte (8 bits) + payload length in bytes (16 bits). */
 export const HEADER_BITS = 24
 
@@ -57,13 +60,13 @@ export function bitsToBytes(bits: Uint8Array): Uint8Array {
 }
 
 /** Header (magic + 16-bit length) followed by the payload, as a 0/1 bit array. */
-export function frameBits(payload: Uint8Array, layout: LaneLayout): Uint8Array {
+export function frameBits(payload: Uint8Array, layout: LaneLayout, withVoice = true): Uint8Array {
   if (payload.length > 0xffff) throw new Error('Payload too large')
   const capacity = payloadCapacityBytes(layout)
   if (payload.length > capacity) {
     throw new Error(`Hidden text needs ${payload.length} bytes but this cover can carry only ${capacity}. Use a shorter message or a longer cover.`)
   }
-  const header = Uint8Array.of(MAGIC, payload.length >> 8, payload.length & 0xff)
+  const header = Uint8Array.of(withVoice ? MAGIC : MAGIC_TEXT_ONLY, payload.length >> 8, payload.length & 0xff)
   const bytes = new Uint8Array(header.length + payload.length)
   bytes.set(header, 0)
   bytes.set(payload, header.length)
@@ -119,6 +122,8 @@ export interface LaneReadout {
   payload: Uint8Array | null
   headerMagic: number
   headerLength: number
+  /** What the sync byte says travelled with the text; null when no frame synchronised. */
+  withVoice: boolean | null
 }
 
 function despread(spec: Spectrum, layout: LaneLayout, chips: Int8Array, bitIndex: number): [number, number] {
@@ -154,8 +159,8 @@ export function readLane(spec: Spectrum, layout: LaneLayout, key: string): LaneR
   const magic = hb[0]
   const length = (hb[1] << 8) | hb[2]
   const fits = HEADER_BITS + length * 8 <= layout.capacityBits
-  if (magic !== MAGIC || length === 0 || !fits) {
-    return { status: 'no-payload', softRe: header.re, softIm: header.im, bits: header.bits, payload: null, headerMagic: magic, headerLength: length }
+  if ((magic !== MAGIC && magic !== MAGIC_TEXT_ONLY) || length === 0 || !fits) {
+    return { status: 'no-payload', softRe: header.re, softIm: header.im, bits: header.bits, payload: null, headerMagic: magic, headerLength: length, withVoice: null }
   }
   const body = readBits(HEADER_BITS, length * 8)
   const softRe = new Float32Array(HEADER_BITS + length * 8)
@@ -167,7 +172,7 @@ export function readLane(spec: Spectrum, layout: LaneLayout, key: string): LaneR
   softIm.set(body.im, HEADER_BITS)
   bits.set(header.bits)
   bits.set(body.bits, HEADER_BITS)
-  return { status: 'ok', softRe, softIm, bits, payload: bitsToBytes(body.bits), headerMagic: magic, headerLength: length }
+  return { status: 'ok', softRe, softIm, bits, payload: bitsToBytes(body.bits), headerMagic: magic, headerLength: length, withVoice: magic === MAGIC }
 }
 
 /** Fraction of differing bits over the overlapping length. */
