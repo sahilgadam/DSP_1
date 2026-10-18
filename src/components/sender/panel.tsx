@@ -98,7 +98,7 @@ interface PanelProps {
   icon: ReactNode
   eyebrow: string
   title: string
-  hint: string
+  hint?: string
   /** Shown next to the eyebrow — usually a <StatusPill />. */
   status?: ReactNode
   /** Buttons; placed beside the header on wide panels, under it otherwise. */
@@ -142,7 +142,7 @@ export function Panel({ accent, icon, eyebrow, title, hint, status, actions, foo
               {status}
             </div>
             <h3 className="mt-1 text-base font-semibold tracking-tight text-white">{title}</h3>
-            <p className={cn('mt-1 text-xs leading-relaxed text-slate-400', !wide && 'min-h-[2.5rem]')}>{hint}</p>
+            {hint && <p className={cn('mt-1 text-xs leading-relaxed text-slate-400', !wide && 'min-h-[2.5rem]')}>{hint}</p>}
           </div>
         </div>
         {actions && <div className={cn('flex flex-wrap gap-2', wide && 'shrink-0 lg:justify-end')}>{actions}</div>}

@@ -72,7 +72,7 @@ function GateCard({
 }: {
   index: number
   title: string
-  hint: string
+  hint?: string
   icon: ReactNode
   locked?: boolean
   lockedHint?: string
@@ -97,7 +97,7 @@ function GateCard({
               {icon}
               {title}
             </h3>
-            <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{locked ? lockedHint : hint}</p>
+            {(locked ? lockedHint : hint) && <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{locked ? lockedHint : hint}</p>}
           </div>
         </div>
         {!locked && children}
@@ -235,8 +235,7 @@ export function ReceiverStep() {
         index={1}
         tourTarget="receiver-overview"
         icon={<FileAudio className="size-4 text-cyan-300" />}
-        title="Load the received audio"
-        hint="The receiver starts with nothing but the file that arrived. Load the stego WAV you downloaded."
+        title="Upload Received Audio"
       >
         <div className="space-y-3">
           <div
@@ -280,7 +279,7 @@ export function ReceiverStep() {
                 )}
               >
                 <Upload className="size-6" aria-hidden="true" />
-                <span>{loadingFile ? 'Reading the file…' : dragging ? 'Drop the file to load it' : 'Drop the stego WAV here, or click to choose one'}</span>
+                <span>{loadingFile ? 'Reading it…' : dragging ? 'Let go to load it' : 'Drop the audio here, or click to choose'}</span>
               </button>
             )}
           </div>
@@ -296,7 +295,7 @@ export function ReceiverStep() {
             )}
             {!receivedFile && transmitted && (
               <button onClick={useChannelAudio} className="text-xs text-cyan-300 underline-offset-2 hover:underline">
-                or use the file from the simulated channel
+                or use the one you just sent
               </button>
             )}
           </div>
@@ -324,10 +323,9 @@ export function ReceiverStep() {
         index={2}
         tourTarget="receiver-key"
         icon={<KeyRound className="size-4 text-amber-200" />}
-        title="Enter the secret key"
-        hint="Type the key the sender shared with you. It is never filled in for you."
+        title="Enter Decryption Key"
         locked={!audioReady}
-        lockedHint="Unlocks once a valid audio file is loaded."
+        lockedHint="Add the audio first."
         done={verified}
       >
         <div className="space-y-3">
@@ -347,7 +345,7 @@ export function ReceiverStep() {
                 id="rkey"
                 type={showKey ? 'text' : 'password'}
                 value={receiverKey}
-                placeholder="the sender’s secret key…"
+                placeholder="secret key…"
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
@@ -374,7 +372,7 @@ export function ReceiverStep() {
               </button>
             </div>
             <Button type="submit" loading={busy === 'decode'} disabled={receiverKey.trim().length === 0 || busy === 'decode'} icon={<LockOpen className="size-4" />}>
-              Unlock
+              Decode
             </Button>
           </form>
 
@@ -410,8 +408,8 @@ export function ReceiverStep() {
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList
               tabs={[
-                { value: 'butterfly', label: 'FFT butterflies', icon: <Binary className="size-4" /> },
-                { value: 'pipeline', label: 'Decoder pipeline', icon: <Workflow className="size-4" /> },
+                { value: 'butterfly', label: 'Butterfly Diagram', icon: <Binary className="size-4" /> },
+                { value: 'pipeline', label: 'Decoding Pipeline', icon: <Workflow className="size-4" /> },
               ]}
             />
             <TabsContent value="butterfly">
@@ -427,8 +425,7 @@ export function ReceiverStep() {
               <Card>
                 <CardTitle
                   icon={<Workflow className="size-4" />}
-                  title="Decoder block diagram"
-                  hint="The exact mirror of the encoder. Click a block to hear the signal there."
+                  title="Decoder Block Diagram"
                   right={
                     <Button variant="ghost" size="sm" onClick={() => setEpoch((e) => e + 1)}>
                       Replay
@@ -468,7 +465,7 @@ export function ReceiverStep() {
       {verified && (
         <div ref={endRef} className="flex justify-end scroll-mb-10">
           <Button size="lg" onClick={() => s.goTo(4)} icon={<ArrowRight className="size-5" />}>
-            Show the hidden message
+            View Results
           </Button>
         </div>
       )}

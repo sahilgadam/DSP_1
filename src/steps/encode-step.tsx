@@ -42,8 +42,7 @@ export function EncodeStep() {
         <Card>
           <CardTitle
             icon={<Cpu className="size-4" />}
-            title="Encoder — live run"
-            hint="The real encoder, block by block, in the order the code executes. The times are measured in the Web Worker; the playback is slowed down so every step can be followed."
+            title="Live Encoding Pipeline"
             right={
               <Button
                 variant="secondary"
@@ -52,7 +51,7 @@ export function EncodeStep() {
                 disabled={running || !canRun}
                 icon={started ? <RotateCcw className="size-3.5" /> : <Play className="size-3.5" />}
               >
-                {started ? 'Encode again' : 'Start encoding'}
+                {started ? 'Run Again' : 'Start Encoding'}
               </Button>
             }
           />
@@ -67,7 +66,7 @@ export function EncodeStep() {
           {failed && (
             <div className="mt-4">
               <Button variant="secondary" size="sm" onClick={() => goTo(0)} icon={<ArrowLeft className="size-3.5" />}>
-                Back to the sender
+                Back to Audio Selection
               </Button>
             </div>
           )}
@@ -76,7 +75,7 @@ export function EncodeStep() {
 
       <div data-tour-target="encode-action" className="flex justify-end pt-1">
         <Button size="lg" onClick={() => goTo(2)} disabled={!encoded} icon={<ArrowRight className="size-5" />}>
-          Send the audio
+          Continue to Transmission
         </Button>
       </div>
       <BeginnerTour open={uiMode === 'beginner' && tourOpen && playback.complete} steps={BEGINNER_HIDE_TOUR_STEPS} onClose={() => setTourOpen(false)} />

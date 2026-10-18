@@ -1,13 +1,12 @@
-import { ArrowRight, Check, CircleAlert, CircleDashed, Dices, Eye, EyeOff, Inbox, KeyRound, LockKeyhole, Mic, Music, Shuffle, TriangleAlert, UserCheck, WandSparkles } from 'lucide-react'
+import { ArrowRight, Check, CircleAlert, CircleDashed, Dices, Eye, EyeOff, Inbox, KeyRound, Mic, Music, TriangleAlert, WandSparkles } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadClipFromFile } from '../audio/load-audio'
 import { AudioSourceCard } from '../components/audio/audio-source-card'
 import { BeginnerTour, type BeginnerTourStep } from '../components/layout/beginner-tour'
 import { Panel, SectionHeading } from '../components/sender/panel'
 import { HiddenTextCard } from '../components/text-lane/hidden-text-card'
 import { Button, cn } from '../components/ui/primitives'
-import { CARRIER_LOW_HZ, GUARD_HZ, NUM_SUBBANDS, SECRET_HIGH_HZ, SECRET_LOW_HZ } from '../dsp/constants'
 import { useStegoStore } from '../store/use-stego-store'
 import { validateSender, type SenderIssue } from './sender-validation'
 
@@ -17,9 +16,6 @@ function randomKey(): string {
   return `${w}-${Math.floor(1000 + Math.random() * 9000)}`
 }
 
-/** Where the scrambled voice ends up in the stego file (display only — the runtime band is quantised to the FFT grid). */
-const VOICE_LANE_LOW_KHZ = CARRIER_LOW_HZ / 1000
-const VOICE_LANE_HIGH_KHZ = (CARRIER_LOW_HZ + (SECRET_HIGH_HZ + GUARD_HZ) - (SECRET_LOW_HZ - GUARD_HZ)) / 1000
 
 const BEGINNER_TOUR_STEPS: BeginnerTourStep[] = [
   { target: 'cover-audio', title: 'Choose your cover audio', text: 'This is the normal audio that everyone will hear. It becomes the signal that carries the hidden information.' },
@@ -29,18 +25,13 @@ const BEGINNER_TOUR_STEPS: BeginnerTourStep[] = [
   { target: 'encode-action', title: "You're ready to encode", text: "You've selected the signals and key. Continue when you're ready for the next stage." },
 ]
 
-const KEY_FACTS: { icon: ReactNode; text: string }[] = [
-  { icon: <Shuffle className="size-3.5" />, text: `Shuffles the ${NUM_SUBBANDS} voice sub-bands` },
-  { icon: <LockKeyhole className="size-3.5" />, text: 'Derives the AES-256 text key' },
-  { icon: <UserCheck className="size-3.5" />, text: 'The receiver needs the same key' },
-]
 
 type ReplaceReason = 'transcript' | 'sample' | 'clear'
 
 const REPLACE_COPY: Record<ReplaceReason, string> = {
-  transcript: 'Transcribed from your recording — edit it before encoding.',
-  sample: 'Sample text inserted, replacing what was there.',
-  clear: 'Hidden text cleared.',
+  transcript: 'Typed out from your recording. Check it over.',
+  sample: 'Sample text added.',
+  clear: 'Text cleared.',
 }
 
 function IssueList({ issues, tone }: { issues: SenderIssue[]; tone: 'blocking' | 'warning' }) {
@@ -149,20 +140,14 @@ export function SenderStep() {
     <div className="space-y-10">
       <section aria-labelledby="sender-carrier">
         <SectionHeading
-          eyebrow="Carrier"
-          title={uiMode === 'beginner' ? 'The audio everyone will hear' : 'Cover signal'}
-          hint="This track is transmitted openly. The hidden lanes are added near the top of its spectrum, above what the ear notices."
+          eyebrow="Cover"
+          title="Cover Audio"
           accent="cyan"
         />
         <div data-tour-target="cover-audio" id="sender-carrier">
           <AudioSourceCard
-            title={uiMode === 'beginner' ? 'Upload cover audio' : 'Audio everyone will hear'}
-            hint={
-              uiMode === 'beginner'
-                ? 'This is the normal audio an outside listener will hear.'
-                : 'Choose the normal cover audio. This is the cover signal used by the steganography system.'
-            }
-            eyebrow="Cover track"
+            title="Cover Track"
+            eyebrow="Carrier"
             icon={<Music className="size-4" />}
             clip={cover}
             onClip={setCover}
@@ -178,16 +163,14 @@ export function SenderStep() {
       <section aria-labelledby="sender-payload">
         <SectionHeading
           eyebrow="Payload"
-          title="What you are hiding"
-          hint="A spoken message and a written message, carried in two separate frequency lanes of the same file. Use either one, or both together."
+          title="Secret Message"
           accent="violet"
         />
         <div id="sender-payload" className="grid items-stretch gap-5 lg:grid-cols-2">
           <div data-tour-target="secret-audio" className="h-full">
             <AudioSourceCard
-              title="Voice message to hide"
-              hint="Record or upload the secret voice. Speech is band-limited to 300–3400 Hz before frequency-domain embedding."
-              eyebrow={uiMode === 'beginner' ? 'Voice message' : `Voice lane · ${VOICE_LANE_LOW_KHZ}–${VOICE_LANE_HIGH_KHZ} kHz`}
+              title="Voice Message"
+              eyebrow="Voice"
               icon={<Mic className="size-4" />}
               clip={secret}
               onClip={setSecret}
@@ -206,8 +189,6 @@ export function SenderStep() {
               text={hiddenText}
               onChange={editText}
               cover={cover}
-              eyebrow={uiMode === 'beginner' ? 'Text message' : undefined}
-              hint={uiMode === 'beginner' ? 'A short written message hidden alongside the voice. It is encrypted with your secret key.' : undefined}
               onReplace={replaceText}
               notice={
                 replaced && (
@@ -231,35 +212,28 @@ export function SenderStep() {
       <section aria-labelledby="sender-key">
         <SectionHeading
           eyebrow="Security"
-          title="One key for both lanes"
-          hint="One key protects both lanes. Without it the recovered audio is unintelligible and the text never decrypts."
+          title="Encryption Key"
           accent="amber"
         />
         <div data-tour-target="secret-key" id="sender-key">
           <Panel
             accent="amber"
             icon={<KeyRound className="size-4" />}
-            eyebrow="Shared secret"
-            title="Secret key"
-            hint="The receiver needs the same key. It controls keyed sub-band scrambling so the hidden voice can be recovered."
+            eyebrow="Key"
+            title="Secret Key"
             actions={
-              <Button variant="secondary" size="sm" onClick={() => {
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
                   // show a generated key so it can be shared with the receiver
                   setKey(randomKey())
                   setShowKey(true)
-                }} icon={<Dices className="size-3.5" />}>
-                Generate random key
+                }}
+                icon={<Dices className="size-3.5" />}
+              >
+                Generate Key
               </Button>
-            }
-            footer={
-              <ul className="grid gap-2 sm:grid-cols-3">
-                {KEY_FACTS.map((f) => (
-                  <li key={f.text} className="flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-xs text-slate-400 ring-1 ring-white/10">
-                    <span className="text-amber-200/80">{f.icon}</span>
-                    {f.text}
-                  </li>
-                ))}
-              </ul>
             }
             filled={!keyMissing}
             wide
@@ -307,8 +281,8 @@ export function SenderStep() {
                 {keyMissing
                   ? keyTouched
                     ? 'A secret key is required before the audio can be encoded.'
-                    : 'Enter a secret key, or generate one. The receiver will need exactly the same key.'
-                  : (keyIssue?.detail ?? 'Share it with the receiver through a separate, trusted channel.')}
+                    : 'Only someone with this key can open it.'
+                  : (keyIssue?.detail ?? 'Share it face to face. Never in the same message.')}
               </p>
             </div>
           </Panel>
@@ -324,10 +298,10 @@ export function SenderStep() {
       >
         <div className="min-w-0 space-y-3">
           <div id="sender-blocking" className="flex flex-wrap items-center gap-2">
-            <ReadyChip done={!!cover && !blockedBy('cover-')} label="Cover audio" />
-            <ReadyChip done={!!secret && !blockedBy('secret-')} optional label="Voice message" />
-            <ReadyChip done={hiddenText.trim().length > 0 && !blockedBy('text-')} optional label="Hidden text" />
-            <ReadyChip done={!keyMissing} label="Secret key" />
+            <ReadyChip done={!!cover && !blockedBy('cover-')} label="Cover" />
+            <ReadyChip done={!!secret && !blockedBy('secret-')} optional label="Voice" />
+            <ReadyChip done={hiddenText.trim().length > 0 && !blockedBy('text-')} optional label="Text" />
+            <ReadyChip done={!keyMissing} label="Key" />
           </div>
           <IssueList issues={status.blocking} tone="blocking" />
         </div>
@@ -336,7 +310,7 @@ export function SenderStep() {
             onClick={() => receivedRef.current?.click()}
             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-400 ring-1 ring-white/10 transition hover:text-white"
           >
-            <Inbox className="size-4" /> Received a stego file? Decode it directly
+            <Inbox className="size-4" /> Decode a Received File
           </button>
           <input
             ref={receivedRef}
@@ -359,7 +333,7 @@ export function SenderStep() {
             title={status.ready ? undefined : status.blocking.map((i) => i.detail).join('\n')}
             icon={<ArrowRight className="size-5" />}
           >
-            {uiMode === 'beginner' ? 'Continue →' : 'Hide secret in audio'}
+            Encode Message
           </Button>
         </div>
       </motion.div>

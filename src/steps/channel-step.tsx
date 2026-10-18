@@ -49,14 +49,13 @@ export function ChannelStep() {
         <Card data-tour-target="channel-controls">
           <CardTitle
             icon={<SlidersHorizontal className="size-4" />}
-            title="What happens during transmission"
-            hint="Simulate what happens to the file on its way. A clean channel = sending the WAV as an attachment."
+            title="Channel Settings"
           />
           <div className="space-y-5">
-            <Switch checked={channel.quantize16} onChange={(v) => setChannel({ quantize16: v })} label="Quantise to 16-bit audio" />
-            <Switch checked={noisy} onChange={(v) => setChannel({ noiseSnrDb: v ? 30 : null })} label="Add transmission noise" />
+            <Switch checked={channel.quantize16} onChange={(v) => setChannel({ quantize16: v })} label="Save as a standard 16-bit WAV" />
+            <Switch checked={noisy} onChange={(v) => setChannel({ noiseSnrDb: v ? 30 : null })} label="Add some noise" />
             <Slider
-              label="Noise level (SNR)"
+              label="How much noise"
               value={channel.noiseSnrDb ?? 30}
               min={0}
               max={60}
@@ -65,48 +64,36 @@ export function ChannelStep() {
               onChange={(v) => setChannel({ noiseSnrDb: v })}
               format={(v) => `${v} dB`}
             />
-            <p className="-mt-3 text-xs text-slate-500">The SNR value is the signal-to-noise ratio: higher means a cleaner transmission.</p>
-            <Slider label="Change volume during transmission" value={channel.gainDb} min={-20} max={6} step={1} onChange={(v) => setChannel({ gainDb: v })} format={(v) => `${v > 0 ? '+' : ''}${v} dB`} />
+            <Slider label="Volume change" value={channel.gainDb} min={-20} max={6} step={1} onChange={(v) => setChannel({ gainDb: v })} format={(v) => `${v > 0 ? '+' : ''}${v} dB`} />
             <Button data-tour-target="channel-action" className="w-full" size="lg" onClick={send} loading={sending} icon={<Send className="size-4" />}>
-              {transmitted ? 'Send again' : 'Transmit stego audio'}
+              {transmitted ? 'Transmit Again' : 'Transmit'}
             </Button>
           </div>
         </Card>
 
         <Card data-tour-target="channel-metrics">
-          <CardTitle title="Audio received" hint="The file that arrived. Anyone listening should hear only the normal audio." />
+          <CardTitle title="Received Audio" />
           {delivered && transmitted ? (
             <div className="space-y-4">
               <WaveformPlayer samples={transmitted.received.samples} color="cyan" label="received.wav" downloadName="received.wav" height={72} />
               <div className="grid gap-3 sm:grid-cols-2">
+                <Metric label="Signal quality" value={fmtDb(transmitted.channelSnrDb)} unit="dB SNR" />
                 <Metric
-                  label="Received vs sent"
-                  value={fmtDb(transmitted.channelSnrDb)}
-                  unit="dB SNR"
-                  hint="Gain-matched: noise, quantisation and clipping count as damage, a pure volume change does not"
-                />
-                <Metric
-                  label="Level change"
+                  label="Volume change"
                   value={`${transmitted.levelChangeDb > 0.05 ? '+' : ''}${transmitted.levelChangeDb.toFixed(1)}`}
                   unit="dB"
                   tone="violet"
-                  hint={`${channel.quantize16 ? '16-bit PCM' : '32-bit float'} · gain ${channel.gainDb > 0 ? '+' : ''}${channel.gainDb} dB${noisy ? ` · AWGN ${channel.noiseSnrDb} dB` : ''}`}
                 />
               </div>
-              {transmitted.noiseSeed !== null && (
-                <p className="font-mono text-[11px] text-slate-500">Noise realisation seed {transmitted.noiseSeed} — every transmission draws new noise.</p>
-              )}
               {transmitted.clippedSamples > 0 && (
                 <p className="rounded-xl bg-amber-400/10 px-3 py-2 text-xs text-amber-100 ring-1 ring-amber-400/30">
-                  {transmitted.clippedSamples.toLocaleString('en-US')} samples went past full scale
-                  {channel.quantize16 ? ' and were clipped by the 16-bit file' : ' and will clip when saved as a 16-bit WAV'}. Clipping spreads distortion across the whole
-                  spectrum, including the hidden bands.
+                  Too loud: {transmitted.clippedSamples.toLocaleString('en-US')} samples clipped. That can damage the secret.
                 </p>
               )}
             </div>
           ) : (
             <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-white/15 text-sm text-slate-500">
-              {sending ? 'Transmitting…' : 'Press “Transmit” to send the stego file'}
+              {sending ? 'On its way…' : 'Nothing yet. Hit send.'}
             </div>
           )}
         </Card>
@@ -114,7 +101,7 @@ export function ChannelStep() {
 
       <div className="flex justify-end">
         <Button size="lg" onClick={() => goTo(3)} disabled={!delivered} icon={<ArrowRight className="size-5" />}>
-          Recover the secret
+          Continue to Decoding
         </Button>
       </div>
       <BeginnerTour open={uiMode === 'beginner' && tourOpen} steps={BEGINNER_CHANNEL_TOUR_STEPS} onClose={() => setTourOpen(false)} />

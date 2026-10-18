@@ -52,7 +52,7 @@ export function OutputStep() {
         {showVoice && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <Card className="ring-1 ring-emerald-400/40">
-              <CardTitle icon={<Volume2 className="size-4" />} title="Voice message" hint="The secret voice, recovered from the received audio." />
+              <CardTitle icon={<Volume2 className="size-4" />} title="Voice Message" />
               <WaveformPlayer
                 samples={decoded.stages.recovered.samples}
                 color="emerald"
@@ -70,8 +70,7 @@ export function OutputStep() {
             <Card className="ring-1 ring-violet-400/40">
               <CardTitle
                 icon={<MessageSquareText className="size-4" />}
-                title="Text message"
-                hint="Decrypted and authenticated with AES-256-GCM."
+                title="Text Message"
                 right={
                   <Button variant="secondary" size="sm" onClick={() => void copy()} icon={copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}>
                     {copied ? 'Copied' : 'Copy'}
@@ -86,10 +85,10 @@ export function OutputStep() {
 
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="secondary" onClick={() => goTo(3)}>
-          Back to receiver
+          Back to Decoding
         </Button>
         <Button variant="secondary" onClick={() => goTo(0)} icon={<RotateCcw className="size-4" />}>
-          Hide another message
+          New Message
         </Button>
       </div>
       <BeginnerTour open={uiMode === 'beginner' && tourOpen} steps={BEGINNER_OUTPUT_TOUR_STEPS} onClose={() => setTourOpen(false)} />

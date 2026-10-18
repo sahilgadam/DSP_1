@@ -1,7 +1,6 @@
 import { Eraser, MessageSquareLock, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { AudioClip } from '../../audio/load-audio'
-import { CHIPS_PER_BIT, LANE_HIGH_HZ, LANE_LOW_HZ } from '../../dsp/constants'
 import { capacityInfo } from '../../steps/sender-validation'
 import { Panel, StatusPill } from '../sender/panel'
 import { Button, cn } from '../ui/primitives'
@@ -12,8 +11,8 @@ export function HiddenTextCard({
   text,
   onChange,
   cover,
-  eyebrow = `Text lane · ${LANE_LOW_HZ / 1000}–${LANE_HIGH_HZ / 1000} kHz`,
-  hint = `AES-256-GCM encrypted, then BPSK phase-coded with ${CHIPS_PER_BIT}× spreading. Leave it empty to send voice only, or send it without a voice.`,
+  eyebrow = 'Text',
+  hint,
   notice,
   onReplace,
   delay,
@@ -30,7 +29,7 @@ export function HiddenTextCard({
   onReplace?: (text: string, reason: 'sample' | 'clear') => void
   delay?: number
 }) {
-  const { limit, used, characters, remaining, over, pct, error } = capacityInfo(cover, text)
+  const { limit, used, remaining, over, pct, error } = capacityInfo(cover, text)
   const filled = used > 0
   const replace = onReplace ?? ((next: string) => onChange(next))
 
@@ -63,10 +62,10 @@ export function HiddenTextCard({
         {error
           ? error
           : limit === null
-            ? `${characters} characters · ${used} UTF-8 bytes — load a cover track to see how many fit.`
+            ? `${used} bytes`
             : over
-              ? `${characters} characters · ${used} bytes — ${used - limit} too many. Shorten the text, or use a longer cover.`
-              : `${characters} characters · ${used} UTF-8 bytes · ${remaining} left. Accented letters and emoji cost 2–4 bytes each.`}
+              ? `${used - limit} bytes too long.`
+              : `${remaining} bytes left`}
       </p>
     </div>
   )
@@ -76,7 +75,7 @@ export function HiddenTextCard({
       accent="emerald"
       icon={<MessageSquareLock className="size-4" />}
       eyebrow={eyebrow}
-      title="Hidden text message"
+      title="Text Message"
       hint={hint}
       status={<StatusPill tone={over ? 'warn' : filled ? 'ready' : 'optional'} label={over ? 'Too long' : filled ? 'Ready' : 'Optional'} />}
       actions={actions}
@@ -91,7 +90,7 @@ export function HiddenTextCard({
         id="hidden-text"
         value={text}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Type a short secret text…"
+        placeholder="Something only they should read…"
         className={cn(
           'min-h-[136px] w-full grow resize-none rounded-xl bg-black/30 px-3.5 py-3 font-mono text-sm leading-relaxed text-slate-100 outline-none ring-1 transition focus:ring-emerald-300/60',
           over ? 'ring-rose-400/70' : 'ring-white/10',

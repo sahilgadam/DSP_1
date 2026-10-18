@@ -11,25 +11,19 @@ import { SenderStep } from './steps/sender-step'
 import { useStegoStore } from './store/use-stego-store'
 
 const STEP_INTRO = [
-  { title: 'Choose your audio', text: 'Choose the normal audio that everyone will hear, then add the secret voice or text you want to hide.' },
-  {
-    title: 'Your secret is now hidden',
-    text: 'Your secret has been embedded into the cover audio. Follow the encoder below, block by block.',
-  },
-  { title: 'Send the audio', text: 'Imagine the hidden audio being sent to another person. Simulate noise, volume changes and quantisation to see whether the secret survives.' },
-  {
-    title: 'Recover the hidden message',
-    text: 'Load the received audio and enter the secret key. Only the right key opens the decoder.',
-  },
-  { title: 'Your secret has been recovered', text: 'The key was verified. Here is the hidden message.' },
+  { title: 'Select Your Audio', text: 'Everyone hears the song. Only one person hears the secret.' },
+  { title: 'Message Encoded', text: 'It still sounds exactly the same. That’s the whole trick.' },
+  { title: 'Transmission', text: 'Out in the open. Nobody suspects a thing.' },
+  { title: 'Decode the Message', text: 'No key, no secret.' },
+  { title: 'Recovered Message', text: 'Sent in plain sound. Read by one.' },
 ]
 
 const STEPS = [SenderStep, EncodeStep, ChannelStep, ReceiverStep, OutputStep]
 
 const BUSY_TEXT = {
-  encode: 'Hiding the secret — applying the FFT, FIR filtering and keyed spectral embedding…',
-  channel: 'Sending the audio — applying channel gain, noise and 16-bit quantisation…',
-  decode: 'Recovering the secret — applying FFT decoding, band extraction and keyed unscrambling…',
+  encode: 'Hiding your secret…',
+  channel: 'Sending your audio…',
+  decode: 'Checking the key…',
 } as const
 
 export default function App() {
@@ -40,10 +34,10 @@ export default function App() {
   const intro =
     step === 1 && !encoded
       ? busy === 'encode'
-        ? { title: 'Hiding your secret…', text: 'The encoder is running in a Web Worker. Follow it below, block by block.' }
+        ? { title: 'Encoding in Progress', text: 'Watch it vanish into the music.' }
         : encodeError
-          ? { title: 'Encoding failed', text: 'Nothing was hidden. The reason is shown below.' }
-          : { title: 'Ready to hide your secret', text: 'Start the encoder to embed your secret into the cover audio.' }
+          ? { title: 'Encoding Failed', text: '' }
+          : { title: 'Ready to Encode', text: '' }
       : STEP_INTRO[step]
   // the Encode step shows its own live progress, so the floating toast would only repeat it
   const toast = busy && !(busy === 'encode' && step === 1) ? busy : null
@@ -66,14 +60,10 @@ export default function App() {
             </div>
             <div>
               <div className="text-base font-extrabold tracking-tight text-white">SpectraHide</div>
-              <div className="text-[11px] text-slate-400">Audio-in-audio steganography · FFT band embedding · time reversal</div>
+              <div className="text-[11px] text-slate-400">Hide a voice inside a song.</div>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="text-right text-[10px] leading-tight text-slate-400" aria-live="polite">
-              <div className="font-semibold text-slate-300">{uiMode === 'beginner' ? 'Beginner Mode' : 'DSP Mode'}</div>
-              <div>{uiMode === 'beginner' ? 'Simple view — focus on what to do.' : 'Technical view — see the signal processing details.'}</div>
-            </div>
             <div className="inline-flex rounded-xl bg-white/5 p-1 ring-1 ring-white/10" role="group" aria-label="Choose application view">
               <button
                 type="button"
@@ -81,7 +71,7 @@ export default function App() {
                 onClick={() => setUIMode('beginner')}
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white aria-pressed:bg-cyan-400 aria-pressed:text-ink-950"
               >
-                Beginner Mode
+                Guided
               </button>
               <button
                 type="button"
@@ -89,7 +79,7 @@ export default function App() {
                 onClick={() => setUIMode('dsp')}
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white aria-pressed:bg-cyan-400 aria-pressed:text-ink-950"
               >
-                DSP Mode
+                Advanced
               </button>
             </div>
           </div>
@@ -119,7 +109,7 @@ export default function App() {
             <div className="mb-6">
               <div className="font-mono text-xs text-cyan-300">STEP {step + 1} / 5</div>
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">{intro.title}</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-400">{intro.text}</p>
+              {intro.text && <p className="mt-2 max-w-3xl text-sm text-slate-400">{intro.text}</p>}
             </div>
             <StepView />
           </motion.section>
@@ -127,7 +117,7 @@ export default function App() {
       </main>
 
       <footer className="mx-auto max-w-7xl px-6 pb-8 text-center text-[11px] text-slate-500">
-        All signal processing runs in your browser (TypeScript radix-2 FFT in a Web Worker). No audio leaves this page.
+        Everything happens in your browser. Your audio never leaves this page.
       </footer>
 
       <AnimatePresence>

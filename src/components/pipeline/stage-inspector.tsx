@@ -85,7 +85,7 @@ export function StageInspector<S extends string>({ node, views, layout, extra, s
         <WaveformPlayer
           samples={view.samples}
           normalize={node.normalize}
-          label={node.normalize ? 'Listen to this stage (loudness normalised)' : 'Listen to this stage'}
+          label="Listen here"
           color={node.kind === 'output' ? 'emerald' : node.kind === 'fft' ? 'violet' : 'cyan'}
         />
 
@@ -134,7 +134,6 @@ function InspectorHeader<S extends string>({ node }: { node: PipelineNode<S> }) 
           <h3 className="text-lg font-semibold text-white">{node.title}</h3>
           <Badge>{node.subtitle}</Badge>
         </div>
-        <p className="mt-2 text-sm leading-relaxed text-slate-300">{node.theory}</p>
       </div>
       {node.formula && (
         <div className="rounded-xl bg-violet-500/10 px-4 py-3 font-mono text-sm text-violet-200 ring-1 ring-violet-400/30">{node.formula}</div>

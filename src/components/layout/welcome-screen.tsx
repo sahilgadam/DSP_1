@@ -8,18 +8,18 @@ interface WelcomeScreenProps {
 const MODES = [
   {
     mode: 'beginner' as const,
-    title: 'Beginner Mode',
-    description: 'Learn step by step with guided tours explaining what, why, and how.',
-    label: 'Guided learning',
+    title: 'Guided Mode',
+    description: 'We’ll walk you through it, one step at a time.',
+    label: 'Start Guided Tour',
     icon: Sparkles,
     accent: 'from-cyan-400/20 to-cyan-400/5',
     iconClassName: 'bg-cyan-400/15 text-cyan-300 ring-cyan-300/25',
   },
   {
     mode: 'dsp' as const,
-    title: 'DSP Mode',
-    description: 'Explore the complete technical interface, visualizations, controls, and signal metrics directly.',
-    label: 'Technical exploration',
+    title: 'Advanced Mode',
+    description: 'Every signal, every block, nothing held back.',
+    label: 'Open Full Workspace',
     icon: SlidersHorizontal,
     accent: 'from-violet-400/20 to-violet-400/5',
     iconClassName: 'bg-violet-400/15 text-violet-300 ring-violet-300/25',
@@ -35,9 +35,9 @@ export function WelcomeScreen({ onSelectMode }: WelcomeScreenProps) {
             <AudioWaveform className="size-8" aria-hidden="true" />
           </div>
           <p className="mt-6 font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">SpectraHide</p>
-          <h1 id="welcome-title" className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-5xl">Welcome to SpectraHide</h1>
-          <p className="mx-auto mt-4 max-w-xl text-base text-slate-400 sm:text-lg">Audio-in-audio steganography with FFT decoding</p>
-          <p className="mt-10 text-sm font-medium text-slate-200 sm:text-base">How would you like to explore SpectraHide?</p>
+          <h1 id="welcome-title" className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-5xl">Secure Audio Steganography</h1>
+          <p className="mx-auto mt-4 max-w-xl text-base text-slate-400 sm:text-lg">A voice inside a song. Only the right key gets it out.</p>
+          <p className="mt-10 text-sm font-medium text-slate-200 sm:text-base">Choose How to Begin</p>
 
           <div className="mx-auto mt-6 grid max-w-4xl gap-4 text-left md:grid-cols-2">
             {MODES.map(({ mode, title, description, label, icon: Icon, accent, iconClassName }) => (
@@ -59,12 +59,10 @@ export function WelcomeScreen({ onSelectMode }: WelcomeScreenProps) {
               </button>
             ))}
           </div>
-
-          <p className="mt-7 text-xs text-slate-500">You can switch modes later from the application header.</p>
         </section>
       </main>
       <footer className="px-6 pb-8 text-center text-[11px] text-slate-500">
-        All signal processing runs in your browser. No audio leaves this page.
+        Everything happens in your browser. Your audio never leaves this page.
       </footer>
     </div>
   )

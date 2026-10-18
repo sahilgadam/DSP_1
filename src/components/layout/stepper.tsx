@@ -3,8 +3,7 @@ import { motion } from 'motion/react'
 import { STEPS, useStegoStore, type StepIndex } from '../../store/use-stego-store'
 import { cn } from '../ui/primitives'
 
-const LABELS = ['Choose Audio', 'Hide Secret', 'Send Audio', 'Recover', 'Results']
-const SUBTITLES = ['Cover + secret', 'FFT embedding', 'Channel simulation', 'FFT decoding', 'Recovered output']
+const LABELS = ['Select Audio', 'Encode', 'Transmit', 'Decode', 'Results']
 
 export function Stepper() {
   const { step, goTo, maxReachableStep } = useStegoStore()
@@ -37,7 +36,6 @@ export function Stepper() {
               </span>
               <span className="hidden sm:block">
                 <span className="block text-xs font-semibold text-white">{LABELS[i]}</span>
-                <span className="block text-[10px] text-slate-400">{SUBTITLES[i]}</span>
               </span>
               {active && <motion.span layoutId="step-underline" className="absolute inset-x-3 -bottom-px h-0.5 rounded bg-cyan-400" />}
             </button>

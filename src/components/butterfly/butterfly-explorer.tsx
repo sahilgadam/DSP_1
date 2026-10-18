@@ -96,8 +96,7 @@ export function ButterflyExplorer({ received, initialKind, stats, onFinished }: 
     <div className="space-y-5">
       <Card>
         <CardTitle
-          title={`Radix-2 ${kind.toUpperCase()} butterfly — ${n}-point zoom`}
-          hint={`Real samples x[${offset}…${offset + n - 1}] from the received audio, run through the decoder's own FFT routine.`}
+          title={`${n}-Point FFT Butterfly`}
           right={
             <div className="flex flex-wrap items-center gap-2">
               <Segmented
@@ -134,7 +133,7 @@ export function ButterflyExplorer({ received, initialKind, stats, onFinished }: 
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
-          <CardTitle title="Current butterfly" hint={`${Math.min(cursor, total)} / ${total} butterflies executed`} />
+          <CardTitle title="Current Butterfly" />
           <AnimatePresence mode="wait">
             {current && inCol && outCol ? (
               <motion.div
@@ -183,15 +182,10 @@ export function ButterflyExplorer({ received, initialKind, stats, onFinished }: 
                     </>
                   )}
                 </div>
-                <p className="font-sans text-xs leading-relaxed text-slate-400">
-                  {kind === 'dit'
-                    ? 'Decimation in time: the input is split into even/odd samples recursively, so it enters in bit-reversed order. The twiddle multiplies the lower wing before the add/subtract.'
-                    : 'Decimation in frequency: the output is split into even/odd frequencies recursively. Inputs enter in natural order, the twiddle multiplies after the subtract, and outputs come out bit-reversed.'}
-                </p>
               </motion.div>
             ) : (
               <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
-                <div className="text-sm text-emerald-300">All {total} butterflies done — this column is the DFT X[k].</div>
+                <div className="text-sm text-emerald-300">All {total} butterflies done. That’s the spectrum.</div>
                 <div className="flex h-28 items-end gap-1.5">
                   {spectrum.map((m, k) => (
                     <div key={k} className="flex flex-1 flex-col items-center gap-1">
@@ -214,7 +208,7 @@ export function ButterflyExplorer({ received, initialKind, stats, onFinished }: 
         </Card>
 
         <Card>
-          <CardTitle title="The real decoding FFT" hint="Same function, full size — this is what extracted the hidden band." />
+          <CardTitle title="Full-Scale Decoding FFT" />
           <div className="grid grid-cols-2 gap-3 font-mono">
             <Stat label="N (zero-padded)" value={`2^${stats.fftStages} = ${fmtInt(N)}`} />
             <Stat label="algorithm" value={`radix-2 ${stats.kind.toUpperCase()}`} />
@@ -224,7 +218,7 @@ export function ButterflyExplorer({ received, initialKind, stats, onFinished }: 
             <Stat label="vs direct DFT (N²)" value={`${speedup.toFixed(0)}× fewer ops`} />
           </div>
           <div className="mt-4">
-            <div className="mb-1.5 text-[11px] text-slate-400">Butterfly span per stage (distance between the two wings)</div>
+            <div className="mb-1.5 text-[11px] text-slate-400">Butterfly Span per Stage</div>
             <div className="space-y-[3px]">
               {Array.from({ length: stats.fftStages }, (_, s) => {
                 const span = stats.kind === 'dit' ? 2 ** s : N / 2 ** (s + 1)

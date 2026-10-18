@@ -5,7 +5,6 @@ import {
   isTranscriptionSupported,
   SpeechTranscriber,
   TRANSCRIPTION_UNSUPPORTED_MESSAGE,
-  TRANSCRIPTION_UPLOAD_MESSAGE,
 } from '../../audio/speech-to-text'
 import { MAX_DURATION_S, SAMPLE_RATE } from '../../dsp/constants'
 import { channelLabel, formatBytes, formatHz, isSilent } from '../../steps/sender-validation'
@@ -27,7 +26,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 interface AudioSourceCardProps {
   title: string
-  hint: string
+  hint?: string
   icon: ReactNode
   /** Short uppercase label above the title — usually the frequency lane this audio travels in. */
   eyebrow: string
@@ -210,16 +209,8 @@ export function AudioSourceCard({
   // Origin comes from the clip itself, so it can never disagree with what is loaded.
   const origin = clip?.source?.kind ?? null
 
-  // One line under the clip details explains what speech-to-text did, or why it did nothing.
-  const speechHint = !transcribes
-    ? null
-    : speechNote
-      ? { text: speechNote, tone: 'text-amber-300' }
-      : !speechSupported
-        ? { text: TRANSCRIPTION_UNSUPPORTED_MESSAGE, tone: 'text-slate-500' }
-        : clip && origin && origin !== 'mic'
-          ? { text: TRANSCRIPTION_UPLOAD_MESSAGE, tone: 'text-slate-500' }
-          : { text: 'Recording also transcribes your speech into the hidden text message.', tone: 'text-slate-500' }
+  // Only speak up when speech-to-text actually had something to report about a recording.
+  const speechHint = transcribes && speechNote ? { text: speechNote, tone: 'text-amber-300' } : null
 
   const silent = !!clip && clip.samples.length > 0 && isSilent(clip)
   const info = clip?.source ?? null
@@ -239,7 +230,6 @@ export function AudioSourceCard({
       </dl>
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{clip.samples.length.toLocaleString('en-US')} samples</Badge>
-        <Badge>mono working copy</Badge>
         {clip.truncated && <Badge className="text-amber-300">trimmed to {MAX_DURATION_S} s</Badge>}
         {origin === 'mic' && <Badge className="text-violet-200">recorded</Badge>}
       </div>
@@ -265,7 +255,6 @@ export function AudioSourceCard({
     </div>
   ) : (
     <div className="space-y-2">
-      <p className="text-xs text-slate-500">Drag an audio file onto this card, or use one of the buttons above.</p>
       {speechHint && <p className={cn('text-xs leading-relaxed', speechHint.tone)}>{speechHint.text}</p>}
     </div>
   )
@@ -296,7 +285,7 @@ export function AudioSourceCard({
         {recording ? (
           <div className="flex min-h-[136px] grow flex-col gap-3 rounded-xl bg-rose-500/10 p-4 text-sm text-rose-200 ring-1 ring-rose-400/30">
             <div className="flex items-center gap-3">
-              <span className="size-3 shrink-0 animate-pulse rounded-full bg-rose-400" /> Recording… speak your secret message
+              <span className="size-3 shrink-0 animate-pulse rounded-full bg-rose-400" /> Recording… say it now
             </div>
             {speechSupported && (
               <p className="grow overflow-y-auto text-xs leading-relaxed text-rose-100/80" aria-live="polite">
@@ -318,7 +307,7 @@ export function AudioSourceCard({
             )}
           >
             <CloudUpload className="size-6" aria-hidden="true" />
-            <span>{dragging ? 'Drop the file to load it' : 'No audio loaded yet'}</span>
+            <span>{dragging ? 'Let go to load it' : 'Drop audio here, or click'}</span>
           </button>
         )}
       </div>

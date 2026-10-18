@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, CircleDashed, CircleX, Loader2, MinusCircle, Pause, Play, RotateCcw } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
-import { CARRIER_LOW_HZ, CHIPS_PER_BIT, GUARD_HZ, LANE_HIGH_HZ, LANE_LOW_HZ, NUM_SUBBANDS, SECRET_HIGH_HZ, SECRET_LOW_HZ } from '../../dsp/constants'
+import { CARRIER_LOW_HZ, GUARD_HZ, LANE_HIGH_HZ, LANE_LOW_HZ, NUM_SUBBANDS, SECRET_HIGH_HZ, SECRET_LOW_HZ } from '../../dsp/constants'
 import { ENCODE_RUN_STAGES, type EncodeRunStage, type StageEvent } from '../../dsp/stego'
 import { Button, cn } from '../ui/primitives'
 
@@ -28,81 +28,79 @@ export const STAGE_INFO: Record<EncodeRunStage, { title: string; sub: string; de
   aes: {
     title: 'AES-256-GCM',
     sub: 'encrypt + frame',
-    detail:
-      'The key is stretched with PBKDF2-SHA256 and the text is encrypted with AES-256-GCM. With no text, an empty message is encrypted instead, so the receiver can still check the key. A sync byte and the length go in front.',
+    detail: 'Your text gets locked with your key. No text? A tiny locked note goes instead, so the key can still be checked.',
     formula: 'frame = salt ‖ IV ‖ AES-GCM_K(text) ‖ tag',
   },
   fft: {
     title: 'FFT',
     sub: 'two-for-one',
-    detail:
-      'One complex radix-2 FFT of z[n] = x_s[n] + j·x_c[n] gives the spectra of the secret and the cover at once, separated by Hermitian symmetry. From here on every block works on FFT bins.',
+    detail: 'The sound is split into its frequencies, like reading the ingredients of a recipe.',
     formula: 'X[k] = Σ x[n]·e^{−j2πnk/N}',
   },
   fir: {
-    title: 'FIR band-pass',
+    title: 'FIR Band-Pass',
     sub: `${SECRET_LOW_HZ}–${SECRET_HIGH_HZ} Hz`,
-    detail: 'A 1023-tap Hamming windowed-sinc band-pass keeps telephone-band speech. In the frequency domain the filter is a product of spectra (fast convolution); its group delay is removed afterwards.',
+    detail: 'Only the speech part of the voice is kept. Everything else is thrown away.',
     formula: 'Y[k] = X_s[k]·H[k]',
   },
   reverse: {
-    title: 'Time reversal',
+    title: 'Time Reversal',
     sub: 'X* · phase ramp',
-    detail: 'The voice is played backwards without leaving the frequency domain: for a real signal, reversing time conjugates the spectrum and adds a linear phase.',
+    detail: 'The voice is flipped, so it plays backwards.',
     formula: 'x[L−1−n] ⟷ X*[k]·e^{−j2πk(L−1)/N}',
   },
   invert: {
-    title: 'Spectral inversion',
+    title: 'Spectral Inversion',
     sub: 'f → f_lo+f_hi−f',
-    detail: 'Inside the speech band low frequencies become high and high become low, the classic analogue voice scrambler.',
+    detail: 'Highs become lows and lows become highs. Now it sounds like gibberish.',
     formula: 'Y[k] = X*[k_lo + k_hi − k]',
   },
   permute: {
-    title: 'Keyed permutation',
+    title: 'Keyed Permutation',
     sub: `${NUM_SUBBANDS} sub-bands · key`,
-    detail: `The band is cut into ${NUM_SUBBANDS} sub-bands and shuffled with a Fisher–Yates permutation seeded by the key: one of ${NUM_SUBBANDS}! ≈ 2×10¹³ orders.`,
+    detail: 'The voice is cut into 16 slices and shuffled by your key. Twenty trillion ways to get it wrong.',
     formula: 'Y_i = X_{π_key(i)}',
   },
   bandstop: {
-    title: 'Band-stop cover',
+    title: 'Band-Stop Filter',
     sub: 'zero hidden bins',
-    detail: 'The cover bins where the hidden lanes will go are set to zero, so the cover cannot collide with them. Very little music lives up there, so the change is hard to hear.',
+    detail: 'A quiet spot is cleared at the very top of the song.',
     formula: 'C[k] = 0,  k ∈ hidden bands',
   },
   shift: {
-    title: 'Shift + scale',
+    title: 'Shift + Scale',
     sub: `→ ${kHz(CARRIER_LOW_HZ)}–${kHz(CARRIER_HIGH_HZ)} kHz`,
-    detail: 'The scrambled band is scaled to sit the chosen number of dB below the cover and moved up to the carrier band, where hearing is weakest. The mirror bins keep the signal real.',
+    detail: 'The scrambled voice slips into that quiet spot, up where ears barely listen.',
     formula: 'S[k + Δk] = g·Y[k],  S[N−k] = S*[k]',
   },
   spread: {
-    title: 'BPSK spreading',
+    title: 'BPSK Spreading',
     sub: `→ ${kHz(LANE_LOW_HZ)}–${kHz(LANE_HIGH_HZ)} kHz`,
-    detail: `Each bit of the frame is phase-coded (0 → +A, 1 → −A) onto ${CHIPS_PER_BIT} bins, each multiplied by a key-seeded ±1 chip: direct-sequence spread spectrum above 20 kHz.`,
+    detail: 'The locked text is spread thin across the very top, beyond human hearing.',
     formula: 'X[k₀+16i+c] = A·(−1)^{bᵢ}·chip_{16i+c}',
   },
   ifft: {
     title: 'Inverse FFT',
     sub: 'Σ → back to time',
-    detail: 'The cleared cover, the shifted voice and the text lane are summed bin by bin, and the inverse FFT turns the sum back into a waveform.',
+    detail: 'Everything is added together and turned back into sound.',
     formula: 's[n] = IFFT{ C[k] + S[k] + T[k] }',
   },
   limit: {
-    title: 'Peak limit',
+    title: 'Peak Limiter',
     sub: 'never clips',
-    detail: 'If the sum peaks above 0.99 the whole file is scaled down by one factor, so the 16-bit WAV never clips and the hidden bands keep their shape.',
+    detail: 'One last volume check, so nothing ever clips.',
     formula: 's[n] ← s[n]·min(1, 0.99 / max|s|)',
   },
-  analysis: { title: 'Display analysis', sub: 'PSD + spectrograms', detail: 'Spectra for the charts. Not part of the encoder.' },
+  analysis: { title: 'Display Analysis', sub: 'PSD + spectrograms', detail: 'Spectra for the charts. Not part of the encoder.' },
 }
 
 const SKIP_REASON: Partial<Record<EncodeRunStage, string>> = {
-  fir: 'Skipped: no voice in this run.',
-  reverse: 'Skipped: no voice in this run.',
-  invert: 'Skipped: no voice in this run.',
-  permute: 'Skipped: no voice in this run.',
-  shift: 'Skipped: no voice in this run.',
-  spread: 'Skipped: nothing to send in the text lane.',
+  fir: 'Skipped. No voice this time.',
+  reverse: 'Skipped. No voice this time.',
+  invert: 'Skipped. No voice this time.',
+  permute: 'Skipped. No voice this time.',
+  shift: 'Skipped. No voice this time.',
+  spread: 'Skipped. Nothing to send up there.',
 }
 
 /** How long each block stays on screen while playing. */
@@ -357,9 +355,9 @@ export function EncoderRunDiagram({ progress, failed, error, fftSize, playback, 
             )
           })}
 
-          <Terminal x={col(0)} y={ROW.voice} title="Secret voice" sub="x_s[n]" lit={started && !voiceSkipped} dim={voiceSkipped} />
+          <Terminal x={col(0)} y={ROW.voice} title="Secret Voice" sub="x_s[n]" lit={started && !voiceSkipped} dim={voiceSkipped} />
           <Terminal x={col(0)} y={ROW.cover} title="Cover" sub="x_c[n]" lit={started} />
-          <Terminal x={col(0)} y={ROW.text} title={keyCheckOnly ? 'Key check' : 'Hidden text'} sub={keyCheckOnly ? 'empty text' : 'UTF-8'} lit={started} />
+          <Terminal x={col(0)} y={ROW.text} title={keyCheckOnly ? 'Key Check' : 'Hidden Text'} sub={keyCheckOnly ? 'empty text' : 'UTF-8'} lit={started} />
 
           {PLAY_STAGES.map((stage) => {
             const p = POS[stage]
@@ -484,23 +482,20 @@ function StepCaption({
             <motion.div key={complete ? 'done' : `${cursor}-${failed}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}>
               {!started ? (
                 <>
-                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">Not started</div>
-                  <p className="mt-1 text-sm text-slate-300">Start the encoder to watch it work block by block.</p>
+                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ready to Start</div>
+                  <p className="mt-1 text-sm text-slate-300">Press start and watch it happen.</p>
                 </>
               ) : failed && !complete ? (
                 <>
-                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-rose-300">Failed at step {cursor + 1}</div>
+                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-rose-300">Stopped at step {cursor + 1}</div>
                   <h4 className="mt-1 text-sm font-semibold text-white">{info?.title}</h4>
                   <p className="mt-1 text-sm text-rose-200">{error}</p>
                 </>
               ) : complete ? (
                 <>
-                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Complete</div>
-                  <h4 className="mt-1 text-sm font-semibold text-white">stego.wav is ready</h4>
-                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-300">
-                    It sounds like the cover, but now carries the hidden payload. The encoder itself took {fmtMs(encoderMs)} in the Web Worker; the playback above
-                    was slowed down so each step can be followed.
-                  </p>
+                  <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Done in {fmtMs(encoderMs)}</div>
+                  <h4 className="mt-1 text-sm font-semibold text-white">Encoding Complete</h4>
+                  <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-300">Listen all you want. You won’t hear it.</p>
                 </>
               ) : (
                 <>
@@ -509,10 +504,10 @@ function StepCaption({
                   </div>
                   <h4 className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
                     {info?.title}
-                    {e?.status === 'done' && e.ms != null && <span className="font-mono text-[11px] font-normal text-cyan-200">measured {fmtMs(e.ms)}</span>}
+                    {e?.status === 'done' && e.ms != null && <span className="font-mono text-[11px] font-normal text-cyan-200">took {fmtMs(e.ms)}</span>}
                   </h4>
                   <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-300">
-                    {e?.status === 'skipped' ? SKIP_REASON[stage!] : waitingForEncoder ? 'The encoder is computing this block…' : info?.detail}
+                    {e?.status === 'skipped' ? SKIP_REASON[stage!] : waitingForEncoder ? 'Working on it…' : info?.detail}
                   </p>
                   {info?.formula && e?.status !== 'skipped' && (
                     <div className="mt-2 inline-block rounded-lg bg-violet-500/10 px-3 py-1.5 font-mono text-xs text-violet-200 ring-1 ring-violet-400/30">{info.formula}</div>
