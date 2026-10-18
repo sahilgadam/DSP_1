@@ -14,14 +14,14 @@ const STEP_INTRO = [
   { title: 'Choose your audio', text: 'Choose the normal audio that everyone will hear, then add the secret voice or text you want to hide.' },
   {
     title: 'Your secret is now hidden',
-    text: 'Your secret has been embedded into the cover audio. Inspect the DSP steps below to see how it happened.',
+    text: 'Your secret has been embedded into the cover audio. Follow the encoder below, block by block.',
   },
   { title: 'Send the audio', text: 'Imagine the hidden audio being sent to another person. Simulate noise, volume changes and quantisation to see whether the secret survives.' },
   {
     title: 'Recover the hidden message',
-    text: 'Use the receiver key to recover the secret from the received audio. Technical decoder settings and visualisations are shown below.',
+    text: 'Load the received audio and enter the secret key. Only the right key opens the decoder.',
   },
-  { title: 'Your secret has been recovered', text: 'Listen to what everyone hears and what the receiver can recover, then review the technical results.' },
+  { title: 'Your secret has been recovered', text: 'The key was verified. Here is the hidden message.' },
 ]
 
 const STEPS = [SenderStep, EncodeStep, ChannelStep, ReceiverStep, OutputStep]
@@ -40,7 +40,7 @@ export default function App() {
   const intro =
     step === 1 && !encoded
       ? busy === 'encode'
-        ? { title: 'Hiding your secret…', text: 'The encoder is running in a Web Worker. Watch each block light up as the code reaches it.' }
+        ? { title: 'Hiding your secret…', text: 'The encoder is running in a Web Worker. Follow it below, block by block.' }
         : encodeError
           ? { title: 'Encoding failed', text: 'Nothing was hidden. The reason is shown below.' }
           : { title: 'Ready to hide your secret', text: 'Start the encoder to embed your secret into the cover audio.' }

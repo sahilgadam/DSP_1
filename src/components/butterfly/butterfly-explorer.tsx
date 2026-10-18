@@ -1,15 +1,19 @@
-import { Pause, Play, RotateCcw, StepForward } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { dft, traceFft, type FftKind } from '../../dsp/fft'
-import { Badge, Button, Card, CardTitle, Segmented, Slider } from '../ui/primitives'
+import { Badge, Card, CardTitle, Segmented } from '../ui/primitives'
 import { ButterflyDiagram, flatten, fmtComplex } from './butterfly-diagram'
 
 interface ButterflyExplorerProps {
   received: Float32Array
   initialKind: FftKind
   stats: { fftSize: number; fftStages: number; butterflyCount: number; fftMs: number; kind: FftKind }
+  /** Called once, when the animation has executed every butterfly. */
+  onFinished?: () => void
 }
+
+/** Time each butterfly stays highlighted while the animation plays by itself. */
+const STEP_MS: Record<8 | 16, number> = { 8: 650, 16: 380 }
 
 function loudestOffset(x: Float32Array, n: number): number {
   let best = 0
@@ -26,13 +30,18 @@ function loudestOffset(x: Float32Array, n: number): number {
 
 const fmtInt = (v: number) => v.toLocaleString('en-US')
 
-export function ButterflyExplorer({ received, initialKind, stats }: ButterflyExplorerProps) {
+/**
+ * Zoom on the decoder's FFT: a few real received samples run through the same `fft()` code, one
+ * butterfly at a time. It plays by itself from the first butterfly to the last.
+ */
+export function ButterflyExplorer({ received, initialKind, stats, onFinished }: ButterflyExplorerProps) {
   const [n, setN] = useState<8 | 16>(8)
   const [kind, setKind] = useState<FftKind>(initialKind)
-  const [offset, setOffset] = useState(() => loudestOffset(received, 16))
+  // the loudest stretch of the file, so the numbers are not all near zero
+  const offset = useMemo(() => loudestOffset(received, 16), [received])
   const [cursor, setCursor] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(700)
+  const finishedOnce = useRef(false)
+  const speed = STEP_MS[n]
 
   const input = useMemo(() => Array.from(received.subarray(offset, offset + n)), [received, offset, n])
   const trace = useMemo(() => traceFft(input, kind), [input, kind])
@@ -40,20 +49,22 @@ export function ButterflyExplorer({ received, initialKind, stats }: ButterflyExp
   const total = flat.length
   const done = cursor >= total
 
+  // a new zoom (DIT/DIF or N) starts again from the first butterfly
   useEffect(() => {
     setCursor(0)
-    setPlaying(false)
   }, [trace])
 
   useEffect(() => {
-    if (!playing) return
     if (cursor >= total) {
-      setPlaying(false)
+      if (!finishedOnce.current) {
+        finishedOnce.current = true
+        onFinished?.()
+      }
       return
     }
     const t = setTimeout(() => setCursor((c) => c + 1), speed)
     return () => clearTimeout(t)
-  }, [playing, cursor, total, speed])
+  }, [cursor, total, speed, onFinished])
 
   const current = cursor < total ? flat[cursor] : null
   const inCol = current ? trace.columns[current.stage] : null
@@ -111,31 +122,13 @@ export function ButterflyExplorer({ received, initialKind, stats }: ButterflyExp
 
         <ButterflyDiagram trace={trace} cursor={cursor} onPick={(f) => setCursor(f)} />
 
-        <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr_1fr] md:items-end">
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setPlaying((p) => !p)} disabled={done} icon={playing ? <Pause className="size-4" /> : <Play className="size-4" />}>
-              {playing ? 'Pause' : 'Play'}
-            </Button>
-            <Button variant="secondary" onClick={() => setCursor((c) => Math.min(total, c + 1))} disabled={done} icon={<StepForward className="size-4" />}>
-              Step
-            </Button>
-            <Button variant="secondary" onClick={() => setCursor(total)} disabled={done}>
-              Finish
-            </Button>
-            <Button variant="ghost" onClick={() => setCursor(0)} icon={<RotateCcw className="size-4" />}>
-              Reset
-            </Button>
+        <div className="mt-4 flex items-center gap-3" aria-live="off">
+          <div className="h-1.5 grow overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={Math.min(cursor, total)} aria-label="Butterflies executed">
+            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-[width] duration-300" style={{ width: `${(Math.min(cursor, total) / total) * 100}%` }} />
           </div>
-          <Slider label="Animation delay" value={speed} min={100} max={1500} step={50} onChange={setSpeed} format={(v) => `${v} ms`} />
-          <Slider
-            label="Frame position in received audio"
-            value={offset}
-            min={0}
-            max={Math.max(0, received.length - 16)}
-            step={1}
-            onChange={setOffset}
-            format={(v) => `n = ${fmtInt(v)} (${(v / 44100).toFixed(2)} s)`}
-          />
+          <span className="shrink-0 font-mono text-[11px] text-slate-400">
+            {done ? 'complete' : `butterfly ${cursor + 1} / ${total}`}
+          </span>
         </div>
       </Card>
 
