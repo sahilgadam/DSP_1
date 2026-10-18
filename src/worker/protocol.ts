@@ -1,4 +1,5 @@
 import type { Psd, Spectrogram } from '../dsp/analysis'
+import type { FrameContent } from '../dsp/bit-lane'
 import type { ChannelParams } from '../dsp/channel'
 import type { FrequencyResponse } from '../dsp/fir'
 import type { BandLayout } from '../dsp/spectral-ops'
@@ -34,8 +35,8 @@ export interface TextDecodeInfo {
   text: string | null
   /** Bits read (header + payload). */
   bits: Uint8Array
-  /** What the frame's sync byte says about the voice band: true = a voice was sent, false = text only, null = unknown. */
-  withVoice: boolean | null
+  /** What the authenticated frame says was sent; null when nothing authenticated. */
+  content: FrameContent | null
   /** Despread symbols (normalised), at most ~1500 points, for the constellation plot. */
   softRe: Float32Array
   softIm: Float32Array

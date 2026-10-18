@@ -8,14 +8,14 @@ import {
   FileAudio,
   KeyRound,
   Lock,
+  LockOpen,
   RotateCcw,
-  SlidersHorizontal,
   TriangleAlert,
   Upload,
   Workflow,
 } from 'lucide-react'
-import { motion } from 'motion/react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { loadClipFromFile, type AudioClip } from '../audio/load-audio'
 import { WaveformPlayer } from '../components/audio/waveform-player'
 import { ButterflyExplorer } from '../components/butterfly/butterfly-explorer'
@@ -25,12 +25,12 @@ import { PermutationView } from '../components/pipeline/permutation-view'
 import { TextDecodePanel, TextStatusBanner } from '../components/text-lane/text-result'
 import { BitGrid, ConstellationPlot } from '../components/text-lane/text-lane-views'
 import { StageInspector } from '../components/pipeline/stage-inspector'
-import { Badge, Button, Card, CardTitle, Segmented, Tabs, TabsContent, TabsList, cn } from '../components/ui/primitives'
+import { Button, Card, CardTitle, Tabs, TabsContent, TabsList, cn } from '../components/ui/primitives'
 import { SAMPLE_RATE } from '../dsp/constants'
 import { DECODE_EDGES, DECODE_NODES } from '../pipeline/stage-meta'
 import { useStegoStore } from '../store/use-stego-store'
 import { channelLabel, formatBytes, formatHz } from './sender-validation'
-import { checkReceivedAudio, checkReceiverKey, recoveryVerdict } from './receiver-validation'
+import { checkReceivedAudio, checkReceiverKey } from './receiver-validation'
 import { useReveal } from './use-reveal'
 
 const MAX_ORDER = Math.max(...DECODE_NODES.map((n) => n.order))
@@ -49,9 +49,9 @@ const BEGINNER_RECEIVER_TOUR_STEPS: BeginnerTourStep[] = [
     text: 'The hidden information was scrambled with a shared secret key.\n\nYou have to type that key in yourself. This step unlocks once a valid file is loaded.',
   },
   {
-    target: 'receiver-fft',
+    target: 'receiver-key',
     title: 'Your turn',
-    text: 'Once the key is in, the decoder appears.\n\nIt uses the FFT to find the hidden frequency region, extract the information and rebuild the secret. Start the recovery when you are ready.',
+    text: 'Press Unlock. A wrong key is rejected straight away.\n\nWith the right key the decoder opens: the FFT finds the hidden frequency region, extracts the information and rebuilds the secret.',
   },
 ]
 
@@ -135,8 +135,6 @@ export function ReceiverStep() {
   const [loadingFile, setLoadingFile] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [keyConfirmed, setKeyConfirmed] = useState(false)
-  const [keyError, setKeyError] = useState<string | null>(null)
   const [showKey, setShowKey] = useState(false)
   const [decodeError, setDecodeError] = useState<string | null>(null)
 
@@ -151,10 +149,10 @@ export function ReceiverStep() {
 
   // The received file is the receiver's only input; checking it costs one PSD, so memoise per clip.
   const audioCheck = useMemo(() => checkReceivedAudio(receivedFile), [receivedFile])
-  const keyCheck = checkReceiverKey(receiverKey)
-
   const audioReady = !!receivedFile && !audioCheck.error
-  const keyReady = audioReady && keyConfirmed && !keyCheck.error
+  // AES-GCM authentication is the key check: every file this app writes carries an authenticated frame
+  const verified = decoded?.text.status === 'ok'
+  const keyWrong = !!decoded && !verified
 
   const accept = async (file: File) => {
     setLoadingFile(true)
@@ -190,28 +188,46 @@ export function ReceiverStep() {
     s.setReceivedFile(null)
     setFileError(null)
     setDecodeError(null)
-    setKeyConfirmed(false)
   }
 
-  const confirmKey = () => {
-    const check = checkReceiverKey(receiverKey)
-    if (check.error) {
-      setKeyError(check.error)
-      setKeyConfirmed(false)
-      return
-    }
-    setKeyError(null)
-    setKeyConfirmed(true)
-  }
-
-  const recover = async () => {
+  /** Decodes with the typed key; the result decides between "Key is incorrect" and the decoder views. */
+  const unlock = async () => {
+    if (!audioReady || checkReceiverKey(receiverKey).error) return
     setDecodeError(null)
     const ok = await s.decode()
-    if (!ok) setDecodeError(useStegoStore.getState().error ?? 'Recovery failed. Check the file and the key, then try again.')
+    if (!ok) {
+      const err = useStegoStore.getState().error
+      if (err) {
+        setDecodeError(err)
+        s.setError(null)
+      }
+    }
   }
 
   const info = receivedFile?.source ?? null
-  const verdict = decoded ? recoveryVerdict(decoded.text.status, decoded.text.withVoice) : null
+
+  // Once the key verifies: bring the butterfly animation into view (it starts by itself), and when it
+  // has finished, carry on down to the end of the page.
+  const decoderRef = useRef<HTMLDivElement>(null)
+  const endRef = useRef<HTMLDivElement>(null)
+  const reduceMotion = useReducedMotion()
+  const [verifyRun, setVerifyRun] = useState(0)
+  useEffect(() => {
+    if (!verified) return
+    setTab('butterfly')
+    setVerifyRun((r) => r + 1)
+    const t = setTimeout(() => decoderRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }), 400)
+    return () => clearTimeout(t)
+  }, [verified, decoded, reduceMotion])
+
+  const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollToEnd = useCallback(() => {
+    // a short pause so the finished spectrum is seen before moving on
+    endTimer.current = setTimeout(() => endRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' }), 1200)
+  }, [reduceMotion])
+  useEffect(() => () => {
+    if (endTimer.current) clearTimeout(endTimer.current)
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -308,17 +324,23 @@ export function ReceiverStep() {
         index={2}
         tourTarget="receiver-key"
         icon={<KeyRound className="size-4 text-amber-200" />}
-        title="Enter the receiver key"
+        title="Enter the secret key"
         hint="Type the key the sender shared with you. It is never filled in for you."
         locked={!audioReady}
         lockedHint="Unlocks once a valid audio file is loaded."
-        done={keyReady}
+        done={verified}
       >
         <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void unlock()
+            }}
+          >
             <div className="relative grow">
               <label htmlFor="rkey" className="sr-only">
-                Receiver key
+                Secret key
               </label>
               <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-amber-200/60" aria-hidden="true" />
               <input
@@ -330,166 +352,126 @@ export function ReceiverStep() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                aria-invalid={!!keyError}
-                aria-describedby="rkey-help"
+                aria-invalid={keyWrong}
+                aria-describedby="rkey-status"
                 onChange={(e) => {
                   s.setReceiverKey(e.target.value)
-                  setKeyError(null)
                   setDecodeError(null)
-                  if (e.target.value.trim().length === 0) setKeyConfirmed(false)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') confirmKey()
                 }}
                 className={cn(
                   'w-full rounded-xl bg-black/30 py-3 pl-10 pr-12 font-mono text-sm tracking-wide text-amber-200 outline-none ring-1 transition focus:ring-amber-300/60',
-                  keyError ? 'ring-rose-400/50' : 'ring-white/10',
+                  keyWrong ? 'ring-rose-400/60' : verified ? 'ring-emerald-400/50' : 'ring-white/10',
                 )}
               />
               <button
                 type="button"
                 onClick={() => setShowKey((v) => !v)}
                 aria-pressed={showKey}
-                aria-label={showKey ? 'Hide the receiver key' : 'Show the receiver key'}
+                aria-label={showKey ? 'Hide the key' : 'Show the key'}
                 className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-slate-400 transition hover:bg-white/5 hover:text-amber-200"
               >
                 {showKey ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
               </button>
             </div>
-            <Button onClick={confirmKey} disabled={receiverKey.trim().length === 0} icon={<CircleCheck className="size-4" />}>
-              {keyReady ? 'Key set' : 'Use this key'}
+            <Button type="submit" loading={busy === 'decode'} disabled={receiverKey.trim().length === 0 || busy === 'decode'} icon={<LockOpen className="size-4" />}>
+              Unlock
             </Button>
+          </form>
+
+          <div id="rkey-status" aria-live="polite">
+            {keyWrong && (
+              <motion.div
+                initial={{ opacity: 0, x: 0 }}
+                animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
+                transition={{ duration: 0.4 }}
+                className="flex items-center gap-2.5 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 ring-1 ring-rose-400/40"
+              >
+                <CircleAlert className="size-5 shrink-0 text-rose-400" aria-hidden="true" />
+                Key is incorrect
+              </motion.div>
+            )}
+            {verified && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2.5 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 ring-1 ring-emerald-400/30"
+              >
+                <CircleCheck className="size-5 shrink-0 text-emerald-400" aria-hidden="true" />
+                Key verified
+              </motion.div>
+            )}
+            {decodeError && <Notice tone="error">{decodeError}</Notice>}
           </div>
-          <p id="rkey-help" className="text-xs leading-relaxed text-slate-500">
-            Nothing here is checked against the sender — whether the key is right only becomes clear once the audio is decoded.
-          </p>
-          {keyError && <Notice tone="error">{keyError}</Notice>}
-          {keyCheck.warning && !keyError && <Notice tone="warning">{keyCheck.warning}</Notice>}
         </div>
       </GateCard>
 
-      <GateCard
-        index={3}
-        tourTarget="receiver-fft"
-        icon={<SlidersHorizontal className="size-4 text-violet-300" />}
-        title="Decoder settings and recovery"
-        hint="Pick the FFT variant the decoder should use, then recover the hidden message."
-        locked={!keyReady}
-        lockedHint="Unlocks once a key has been entered."
-        done={!!decoded}
-      >
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-2">
-              <div className="text-xs text-slate-400">
-                FFT algorithm <span className="text-slate-500">(used by the decoder)</span>
-              </div>
-              <Segmented
-                value={fftKind}
-                onChange={s.setFftKind}
-                options={[
-                  { value: 'dit', label: 'Radix-2 DIT' },
-                  { value: 'dif', label: 'Radix-2 DIF' },
-                ]}
-              />
-            </div>
-            <Button
-              data-tour-target="receiver-action"
-              size="lg"
-              onClick={() => void recover()}
-              loading={busy === 'decode'}
-              disabled={!keyReady}
-              icon={<Binary className="size-4" />}
-            >
-              Recover hidden message
-            </Button>
-          </div>
-          {decodeError && <Notice tone="error">{decodeError}</Notice>}
-          {verdict && !decodeError && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-              <Notice tone={verdict.tone === 'ok' ? 'ok' : verdict.tone === 'bad' ? 'error' : 'warning'}>
-                <div className="font-semibold">{verdict.title}</div>
-                <p className="mt-1 opacity-90">{verdict.detail}</p>
-                {decoded?.text.text && (
-                  <div className="mt-2 rounded-lg bg-black/30 px-3 py-2 font-mono text-sm break-words text-white">{decoded.text.text}</div>
-                )}
-              </Notice>
-            </motion.div>
-          )}
-        </div>
-      </GateCard>
-
-      {decoded && receivedFile && (
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList
-            tabs={[
-              { value: 'butterfly', label: 'FFT butterflies', icon: <Binary className="size-4" /> },
-              { value: 'pipeline', label: 'Decoder pipeline', icon: <Workflow className="size-4" /> },
-            ]}
-          />
-          <TabsContent value="butterfly">
-            <ButterflyExplorer
-              key={`${fftKind}-${decoded.fftSize}`}
-              received={receivedFile.samples}
-              initialKind={fftKind}
-              stats={{ ...decoded, kind: fftKind }}
+      {verified && decoded && receivedFile && (
+        <div ref={decoderRef} className="scroll-mt-40">
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList
+              tabs={[
+                { value: 'butterfly', label: 'FFT butterflies', icon: <Binary className="size-4" /> },
+                { value: 'pipeline', label: 'Decoder pipeline', icon: <Workflow className="size-4" /> },
+              ]}
             />
-          </TabsContent>
-          <TabsContent value="pipeline" className="space-y-6">
-            <Card>
-              <CardTitle
-                icon={<Workflow className="size-4" />}
-                title="Decoder block diagram"
-                hint="The exact mirror of the encoder. Click a block to hear the signal there."
-                right={
-                  <Button variant="ghost" size="sm" onClick={() => setEpoch((e) => e + 1)}>
-                    Replay
-                  </Button>
+            <TabsContent value="butterfly">
+              <ButterflyExplorer
+                key={`${fftKind}-${decoded.fftSize}-${verifyRun}`}
+                received={receivedFile.samples}
+                initialKind={fftKind}
+                stats={{ ...decoded, kind: fftKind }}
+                onFinished={scrollToEnd}
+              />
+            </TabsContent>
+            <TabsContent value="pipeline" className="space-y-6">
+              <Card>
+                <CardTitle
+                  icon={<Workflow className="size-4" />}
+                  title="Decoder block diagram"
+                  hint="The exact mirror of the encoder. Click a block to hear the signal there."
+                  right={
+                    <Button variant="ghost" size="sm" onClick={() => setEpoch((e) => e + 1)}>
+                      Replay
+                    </Button>
+                  }
+                />
+                <PipelineFlow nodes={DECODE_NODES} edges={DECODE_EDGES} revealed={revealed} selectedId={selected} onSelect={setSelected} height={400} />
+              </Card>
+              <StageInspector
+                node={node}
+                views={decoded.stages}
+                layout={decoded.layout}
+                extra={
+                  node.id === 'unpermute' ? (
+                    <PermutationView permutation={decoded.permutation} keyLabel={receiverKey} />
+                  ) : node.id === 'despread' ? (
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
+                      <div className="rounded-xl bg-black/30 p-3 ring-1 ring-white/10">
+                        <div className="mb-1 text-[11px] text-slate-400">Despread symbols (BPSK constellation)</div>
+                        <ConstellationPlot re={decoded.text.softRe} im={decoded.text.softIm} />
+                      </div>
+                      {/* No reference bits: the receiver only ever sees what it decoded itself. */}
+                      <BitGrid bits={decoded.text.bits} title="Decided bits" />
+                    </div>
+                  ) : node.id === 'decrypt' ? (
+                    <TextStatusBanner info={decoded.text} />
+                  ) : node.id === 'message' ? (
+                    <TextDecodePanel info={decoded.text} sent={null} />
+                  ) : null
                 }
               />
-              <PipelineFlow nodes={DECODE_NODES} edges={DECODE_EDGES} revealed={revealed} selectedId={selected} onSelect={setSelected} height={400} />
-            </Card>
-            <StageInspector
-              node={node}
-              views={decoded.stages}
-              layout={decoded.layout}
-              extra={
-                node.id === 'unpermute' ? (
-                  <PermutationView permutation={decoded.permutation} keyLabel={receiverKey} />
-                ) : node.id === 'despread' ? (
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
-                    <div className="rounded-xl bg-black/30 p-3 ring-1 ring-white/10">
-                      <div className="mb-1 text-[11px] text-slate-400">Despread symbols (BPSK constellation)</div>
-                      <ConstellationPlot re={decoded.text.softRe} im={decoded.text.softIm} />
-                    </div>
-                    {/* No reference bits: the receiver only ever sees what it decoded itself. */}
-                    <BitGrid bits={decoded.text.bits} title="Decided bits" />
-                  </div>
-                ) : node.id === 'decrypt' ? (
-                  <TextStatusBanner info={decoded.text} />
-                ) : node.id === 'message' ? (
-                  <TextDecodePanel info={decoded.text} sent={null} />
-                ) : null
-              }
-            />
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs text-slate-500">
-          {decoded ? (
-            <span className="inline-flex items-center gap-2">
-              <Badge>decoded with the key you entered</Badge>
-            </span>
-          ) : (
-            'Load a file and enter a key to recover the hidden message.'
-          )}
+      {verified && (
+        <div ref={endRef} className="flex justify-end scroll-mb-10">
+          <Button size="lg" onClick={() => s.goTo(4)} icon={<ArrowRight className="size-5" />}>
+            Show the hidden message
+          </Button>
         </div>
-        <Button size="lg" onClick={() => s.goTo(4)} disabled={!decoded} icon={<ArrowRight className="size-5" />}>
-          Hear the recovered secret
-        </Button>
-      </div>
+      )}
       <BeginnerTour open={s.uiMode === 'beginner' && tourOpen} steps={BEGINNER_RECEIVER_TOUR_STEPS} onClose={() => setTourOpen(false)} />
     </div>
   )
