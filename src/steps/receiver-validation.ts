@@ -62,12 +62,15 @@ export function checkReceiverKey(key: string): KeyCheck {
 export type Verdict = 'ok' | 'auth-failed' | 'no-payload'
 
 /** Plain-language reading of what the decode actually proved, with no reference to sender state. */
-export function recoveryVerdict(status: Verdict): { tone: 'ok' | 'bad' | 'unsure'; title: string; detail: string } {
+export function recoveryVerdict(status: Verdict, withVoice: boolean | null = null): { tone: 'ok' | 'bad' | 'unsure'; title: string; detail: string } {
   if (status === 'ok') {
     return {
       tone: 'ok',
-      title: 'Key verified — hidden text recovered',
-      detail: 'The text lane synchronised and AES-GCM authenticated it, which proves this key matches the one used to hide the message.',
+      title: withVoice === false ? 'Key verified — hidden text recovered (text only)' : 'Key verified — hidden text recovered',
+      detail:
+        withVoice === false
+          ? 'The text lane synchronised and AES-GCM authenticated it, which proves this key matches. Its frame says no voice was hidden, so there is no audio message to recover.'
+          : 'The text lane synchronised and AES-GCM authenticated it, which proves this key matches the one used to hide the message.',
     }
   }
   if (status === 'auth-failed') {

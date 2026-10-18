@@ -112,7 +112,7 @@ export function ButterflyExplorer({ received, initialKind, stats }: ButterflyExp
         <ButterflyDiagram trace={trace} cursor={cursor} onPick={(f) => setCursor(f)} />
 
         <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr_1fr] md:items-end">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => setPlaying((p) => !p)} disabled={done} icon={playing ? <Pause className="size-4" /> : <Play className="size-4" />}>
               {playing ? 'Pause' : 'Play'}
             </Button>

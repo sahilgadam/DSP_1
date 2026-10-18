@@ -67,17 +67,23 @@ describe('validateSender', () => {
     expect(status.blocking).toHaveLength(0)
   })
 
-  it('blocks on a missing cover, secret or key', () => {
+  it('blocks on a missing cover, payload or key', () => {
     expect(ids({ ...base, cover: null })).toContain('cover-missing')
-    expect(ids({ ...base, secret: null })).toContain('secret-missing')
+    expect(ids({ ...base, secret: null, hiddenText: '' })).toContain('payload-missing')
     expect(ids({ ...base, key: '' })).toContain('key-missing')
     expect(ids({ ...base, key: '   ' })).toContain('key-missing')
     expect(validateSender({ ...base, key: '   ' }).ready).toBe(false)
   })
 
-  it('requires the secret voice in beginner mode too, since encode() does', () => {
-    expect(validateSender({ ...base, secret: null, beginner: true }).ready).toBe(false)
-    expect(validateSender({ ...base, secret: null, beginner: true }).blocking.map((i) => i.id)).toContain('secret-missing')
+  it('accepts a text-only payload, since encode() does', () => {
+    expect(validateSender({ ...base, secret: null, hiddenText: 'only text' }).ready).toBe(true)
+    expect(validateSender({ ...base, secret: null, hiddenText: 'only text', beginner: true }).ready).toBe(true)
+  })
+
+  it('needs at least one payload, and whitespace is not a text payload', () => {
+    expect(validateSender({ ...base, secret: null, hiddenText: '   \n ' }).blocking.map((i) => i.id)).toContain('payload-missing')
+    expect(validateSender({ ...base, hiddenText: '   ' }).warnings.map((i) => i.id)).toContain('text-blank')
+    expect(validateSender({ ...base, hiddenText: '   ' }).ready).toBe(true)
   })
 
   it('blocks silent audio the way the encoder does', () => {

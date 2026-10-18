@@ -15,6 +15,11 @@ export const CLEAN_CHANNEL: ChannelParams = { noiseSnrDb: null, quantize16: true
 
 /** Simulates transmission: volume change, AWGN, then 16-bit quantisation (with clipping). */
 export function applyChannel(x: Float32Array, params: ChannelParams): Float32Array {
+  return applyChannelWithStats(x, params).out
+}
+
+/** `applyChannel`, also counting the samples that ended up beyond full scale (clipped by a 16-bit file). */
+export function applyChannelWithStats(x: Float32Array, params: ChannelParams): { out: Float32Array; clipped: number } {
   const g = 10 ** (params.gainDb / 20)
   const out = x.map((v) => v * g)
   if (params.noiseSnrDb !== null) {
@@ -23,11 +28,13 @@ export function applyChannel(x: Float32Array, params: ChannelParams): Float32Arr
     const noise = gaussianNoise(out.length, params.seed ?? 1234)
     for (let i = 0; i < out.length; i++) out[i] += noiseStd * noise[i]
   }
+  let clipped = 0
+  for (let i = 0; i < out.length; i++) if (out[i] > 1 || out[i] < -1) clipped++
   if (params.quantize16) {
     for (let i = 0; i < out.length; i++) {
       const c = Math.max(-1, Math.min(1, out[i]))
       out[i] = Math.round(c * 32767) / 32767
     }
   }
-  return out
+  return { out, clipped }
 }

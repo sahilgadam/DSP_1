@@ -14,7 +14,7 @@ const STEP_INTRO = [
   { title: 'Choose your audio', text: 'Choose the normal audio that everyone will hear, then add the secret voice or text you want to hide.' },
   {
     title: 'Your secret is now hidden',
-    text: 'The secret voice and optional text have been embedded into the audio. Inspect the DSP steps below to see how it happened.',
+    text: 'Your secret has been embedded into the cover audio. Inspect the DSP steps below to see how it happened.',
   },
   { title: 'Send the audio', text: 'Imagine the hidden audio being sent to another person. Simulate noise, volume changes and quantisation to see whether the secret survives.' },
   {
@@ -33,10 +33,20 @@ const BUSY_TEXT = {
 } as const
 
 export default function App() {
-  const { step, error, setError, busy, uiMode, setUIMode, goTo } = useStegoStore()
+  const { step, error, setError, busy, uiMode, setUIMode, goTo, encoded, encodeError } = useStegoStore()
   const [welcomeOpen, setWelcomeOpen] = useState(true)
   const StepView = STEPS[step]
-  const intro = STEP_INTRO[step]
+  // The Encode step's heading follows the real run rather than assuming it already succeeded.
+  const intro =
+    step === 1 && !encoded
+      ? busy === 'encode'
+        ? { title: 'Hiding your secret…', text: 'The encoder is running in a Web Worker. Watch each block light up as the code reaches it.' }
+        : encodeError
+          ? { title: 'Encoding failed', text: 'Nothing was hidden. The reason is shown below.' }
+          : { title: 'Ready to hide your secret', text: 'Start the encoder to embed your secret into the cover audio.' }
+      : STEP_INTRO[step]
+  // the Encode step shows its own live progress, so the floating toast would only repeat it
+  const toast = busy && !(busy === 'encode' && step === 1) ? busy : null
 
   const selectMode = (mode: 'beginner' | 'dsp') => {
     setUIMode(mode)
@@ -121,7 +131,7 @@ export default function App() {
       </footer>
 
       <AnimatePresence>
-        {busy && (
+        {toast && (
           <motion.div
             role="status"
             initial={{ opacity: 0, y: 20 }}
@@ -130,7 +140,7 @@ export default function App() {
             className="fixed bottom-6 left-1/2 z-50 flex w-[min(92vw,620px)] -translate-x-1/2 items-center gap-3 rounded-2xl bg-ink-800/95 p-4 text-sm text-slate-200 shadow-2xl ring-1 ring-cyan-400/40"
           >
             <Loader2 className="size-5 shrink-0 animate-spin text-cyan-300" />
-            <span>{BUSY_TEXT[busy]}</span>
+            <span>{BUSY_TEXT[toast]}</span>
           </motion.div>
         )}
       </AnimatePresence>

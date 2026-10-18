@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { AudioClip } from '../../audio/load-audio'
 import { CHIPS_PER_BIT, LANE_HIGH_HZ, LANE_LOW_HZ } from '../../dsp/constants'
 import { capacityInfo } from '../../steps/sender-validation'
-import { Panel, StatusPill } from '../ui/panel'
+import { Panel, StatusPill } from '../sender/panel'
 import { Button, cn } from '../ui/primitives'
 
 const SAMPLE_TEXT = 'Meet the DSP team at lab 4 at 5 PM. Bring the FFT notes!'
@@ -13,7 +13,7 @@ export function HiddenTextCard({
   onChange,
   cover,
   eyebrow = `Text lane · ${LANE_LOW_HZ / 1000}–${LANE_HIGH_HZ / 1000} kHz`,
-  hint = `AES-256-GCM encrypted, then BPSK phase-coded with ${CHIPS_PER_BIT}× spreading. Optional — leave it empty to send voice only.`,
+  hint = `AES-256-GCM encrypted, then BPSK phase-coded with ${CHIPS_PER_BIT}× spreading. Leave it empty to send voice only, or send it without a voice.`,
   notice,
   onReplace,
   delay,

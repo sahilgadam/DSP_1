@@ -211,7 +211,7 @@ export function ReceiverStep() {
   }
 
   const info = receivedFile?.source ?? null
-  const verdict = decoded ? recoveryVerdict(decoded.text.status) : null
+  const verdict = decoded ? recoveryVerdict(decoded.text.status, decoded.text.withVoice) : null
 
   return (
     <div className="space-y-6">
